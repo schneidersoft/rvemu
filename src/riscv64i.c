@@ -31,13 +31,6 @@ int read_file(cpu_t *cpu, char *filename) {
     // Read file contents into buffer
     fread(buffer, fileLen, 1, file);
     fclose(file);
-    //// Print file contents in hex
-    // for (int i = 0; i < fileLen; i += 2) {
-    //     if (i % 16 == 0)
-    //         printf("\n%.8x: ", i);
-    //     printf("%02x%02x ", *(buffer + i), *(buffer + i + 1));
-    // }
-    // printf("\n");
 
     // copy the bin executable to dram
     memcpy(cpu->bus.dram.mem, buffer, fileLen * sizeof(uint8_t));

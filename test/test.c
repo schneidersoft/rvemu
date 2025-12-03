@@ -6,7 +6,6 @@
 #include "dbg.h"
 #include "aes.h"
 #include "sha256.h"
-#include "uECC.h"
 
 unsigned long int strlen(const char *f) {
     int i = 0;
@@ -53,11 +52,6 @@ void bintohex(const uint8_t *bin, int binlen, char *out, int outlen) {
         out++;
     }
 }
-
-// int printf(const char *msg, ...) {
-//     ecall(ECALL_DEBUG, msg, -1);
-//     return -;
-// }
 
 static inline uint32_t rotr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
 
@@ -131,90 +125,6 @@ int test_or(void) {
     return 0;
 }
 
-char *spigot(void) {
-    int i, j, k, q, x = 0;
-    int len, nines = 0, predigit = 0;
-    int precision = 1001;
-    char buff[10 + 2];
-    static char res[2000];
-    int respos = 0;
-
-    // calculate array length and create empty array
-    len = (10 * precision / 3) + 1;
-    int a[len];
-
-    // initialize array with all 2's
-    for (i = 0; i < len; i = i + 1) {
-        a[i] = 2;
-    }
-
-    // repeat calculation loop 'precision' times - depends on desired precision
-    for (j = 1; j <= precision; j = j + 1) {
-        q = 0;
-
-        // calculate q
-        for (i = len; i > 0; i = i - 1) {
-            x = 10 * a[i - 1] + q * i;
-            a[i - 1] = x % (2 * i - 1);
-            q = x / (2 * i - 1);
-        }
-
-        a[0] = q % 10;
-        q = q / 10;
-
-        // append different digits based on q value
-        if (q == 9) {
-            // if q is 9, increment nines counter
-            nines = nines + 1;
-        } else if (q == 10) {
-            // if q is 10 (overflow case), write 9 then predigit + 1
-            sprintf(buff, "%d", predigit + 1);
-            for (int i = 0; buff[i] != 0; i++)
-                res[respos++] = buff[i];
-            // strcat(res, buff);
-
-            for (k = 0; k < nines; k = k + 1) {
-                sprintf(buff, "%d", 0);
-                // strcat(res, buff);
-                for (int i = 0; buff[i] != 0; i++)
-                    res[respos++] = buff[i];
-            }
-
-            predigit = 0;
-            nines = 0;
-        } else {
-            // if q is not 9 or 10, print predigit
-            sprintf(buff, "%d", predigit);
-            // strcat(res, buff);
-            for (int i = 0; buff[i] != 0; i++)
-                res[respos++] = buff[i];
-
-            // advance predigit to next q
-            predigit = q % 10;
-
-            // handle nines which were tracked
-            if (nines != 0) {
-                for (k = 0; k < nines; k = k + 1) {
-                    sprintf(buff, "%d", 9);
-                    // strcat(res, buff);
-                    for (int i = 0; buff[i] != 0; i++)
-                        res[respos++] = buff[i];
-                }
-                nines = 0;
-            }
-        }
-    }
-
-    // add the final digit
-    sprintf(buff, "%d9", predigit);
-    // strcat(res, buff);
-    for (int i = 0; buff[i] != 0; i++)
-        res[respos++] = buff[i];
-
-    // return the pi result in string format
-    return res;
-}
-
 static uint32_t r = 0xdeadbeef;
 
 static inline int8_t rand8(uint32_t *r) {
@@ -266,9 +176,6 @@ int main(void) {
         DBG("sha256 FAILED");
     }
 
-    //    char *pi = spigot();
-    //    DBG("pi: %s", pi);
-
     uint8_t *aeskey = expectd;
 
     struct AES_ctx ctx;
@@ -278,44 +185,6 @@ int main(void) {
     DBG_HEX(pt, 16, "AES PT: ");
     AES_ECB_encrypt(&ctx, pt);
     DBG_HEX(pt, 16, "AES CT: ");
-
-
-    uECC_set_rng(uECC_PRNG);
-
-    uint8_t pub[64];
-    uint8_t key[32];
-
-    if (!uECC_make_key(pub, key, uECC_secp256k1())) {
-        DBG("uECC_make_key");
-    }
-
-    DBG_HEX(pub, sizeof(pub), "PUB: ");
-    DBG_HEX(key, sizeof(key), "KEY: ");
-
-    uint8_t digest[32];
-    for (int i = 0; i < 32; i++) digest[i] = rand8(&r);
-
-    DBG_HEX(digest, sizeof(digest), "DIG: ");
-
-    uint8_t signature[64];
-
-    if (!uECC_sign(key, digest, 32, signature, uECC_secp256k1())) {
-        DBG("uECC_sign");
-    }
-
-    DBG_HEX(signature, sizeof(signature), "SIG: ");
-
-    if (!uECC_verify(pub, digest, 64, signature, uECC_secp256k1())) {
-        DBG("SIGNATURE NOT OK");
-    } else {
-        DBG("SIGNATURE OK");
-    }
-
-    //    char tmp[] =
-    //    "031415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989";
-    //    if (memcmp(tmp, pi, sizeof(tmp)) != 0) {
-    //        DBG("spigot FAILED");
-    //    }
 
     return 0;
 }

@@ -2,10 +2,13 @@ TESTSRC=
 TESTSRC+=test/test.c
 TESTSRC+=test/sha256.c
 TESTSRC+=test/aes.c
-TESTSRC+=test/uECC.c
 TESTSRC+=test/dbg.c
 
-all: bin/riscv64i bin/rv64i.bin bin/htest
+.PHONEY=all test
+
+all: bin/riscv64i test
+
+test: bin/riscv64i bin/rv64i.bin bin/htest
 	./bin/htest.elf
 	@echo "-------"
 	./bin/riscv64i bin/rv64i.bin
