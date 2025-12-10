@@ -22,3 +22,6 @@ see riscv64i.c for an example implementation
 
 This core does not support breakpoints. So you will need execute ebreak or ecall from C. console ouput and other syscalls can be achieved this way.
  
+# rv64im
+
+This core also supports rv64im instructions. So you should be able to compile with `-march=rv64im -mabi=lp64` as well
