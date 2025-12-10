@@ -58,25 +58,27 @@ void print_BUS_safe(struct cpu_t *cpu, uint64_t addr) {
     putc('\n', stderr);
 }
 
-void ECALL_cb(cpu_t *cpu, uint32_t inst) {
+int ECALL_cb(cpu_t *cpu, uint32_t inst) {
     switch (cpu->regs[10]) {
-    case 0: print_BUS_safe(cpu, cpu->regs[11]); break;
-    case 1: exit(0); break;
-    case 2: fputc(cpu->regs[11], stderr); break;
+    case 0: print_BUS_safe(cpu, cpu->regs[11]); return 0;
+    case 1: exit(0); return 0;
+    case 2: fputc(cpu->regs[11], stderr); return 0;
     default:
-        break;
+        return -1;
     }
 }
 
-void EBREAK_cb(cpu_t *cpu, uint32_t inst) {
+int EBREAK_cb(cpu_t *cpu, uint32_t inst) {
     exit(0);
+    return 0;
 }
 
-void INVOP_cb(cpu_t *cpu, uint32_t inst) {
+int INVOP_cb(cpu_t *cpu, uint32_t inst) {
     int opcode = inst & 0x7f;         // opcode in bits 6..0
     int funct3 = (inst >> 12) & 0x7;  // funct3 in bits 14..12
     int funct7 = (inst >> 25) & 0x7f; // funct7 in bits 31..25
     DBG("%016lx [-] ERROR-> 0x%08x opcode:0x%x, funct3:0x%x, funct7:0x%x\n", cpu->pc - 4, inst, opcode, funct3, funct7);
+    return -1;
 }
 
 int main(int argc, char **argv) {
@@ -93,9 +95,6 @@ int main(int argc, char **argv) {
     do {
         uint32_t inst = cpu_fetch(&cpu);
 
-        // Increment the program counter
-
-        // execute
         if (cpu_execute(&cpu, inst)) {
             DBG("execute error");
             break;

@@ -29,7 +29,7 @@ void cpu_init(struct cpu_t *cpu);
 uint32_t cpu_fetch(struct cpu_t *cpu);
 int cpu_execute(struct cpu_t *cpu, uint32_t inst);
 
-extern void ECALL_cb(cpu_t *cpu, uint32_t inst);
-extern void EBREAK_cb(cpu_t *cpu, uint32_t inst);
-extern void INVOP_cb(cpu_t *cpu, uint32_t inst);
+extern int ECALL_cb(cpu_t *cpu, uint32_t inst);
+extern int EBREAK_cb(cpu_t *cpu, uint32_t inst);
+extern int INVOP_cb(cpu_t *cpu, uint32_t inst);
 #endif

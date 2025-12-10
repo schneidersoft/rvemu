@@ -145,9 +145,20 @@ int uECC_PRNG(uint8_t *dst, unsigned size) {
     return 1;
 }
 
+#define TEST(name, expr, expected) \
+    do { \
+        uint64_t result = (expr); \
+        if (result != (expected)) { \
+            printf("FAIL: %s -> got %ld (0x%lx), expected %ld (0x%lx)\n", \
+                   name, (int64_t)result, result, (int64_t)(expected), (uint64_t)(expected)); \
+        } else { \
+            printf("PASS: %s\n", name); \
+        } \
+    } while (0)
+
 int main(void) {
     //    printf("test: %d\n", 1234);
-    DBG("STGARTING TESTS");
+    DBG("STARTING TESTS");
     test_rotr();
     test_shiftl();
     test_or();
@@ -186,5 +197,61 @@ int main(void) {
     AES_ECB_encrypt(&ctx, pt);
     DBG_HEX(pt, 16, "AES CT: ");
 
+
+    //   MUL (low 64 bits)
+    TEST("MUL signed", ({ int64_t a = 5, b = -7; (uint64_t)(a * b); }), (uint64_t)(-35));
+
+    //   MULH and MULHU and MULHSU (high 64 bits)
+    TEST("MULH signed x signed high",
+         ({
+             int64_t a = 0x7FFFFFFFFFFFFFFF;
+             int64_t b = 0x7FFFFFFFFFFFFFFF;
+             (__int128)a * (__int128)b >> 64;
+         }),
+         (uint64_t)0x3fffffffffffffff);
+
+    TEST("MULHU unsigned x unsigned high",
+         ({
+             uint64_t a = 0xFFFFFFFFFFFFFFFFULL;
+             uint64_t b = 2;
+             ((__uint128_t)a * (__uint128_t)b) >> 64;
+         }),
+         (uint64_t)0x1);
+
+    TEST("MULHSU signed x unsigned high",
+         ({
+             int64_t a = -5;
+             uint64_t b = 10;
+             (((__int128)a * (__uint128_t)b) >> 64);
+         }),
+         (uint64_t)-1);
+
+    //   DIV
+    TEST("DIV signed", ({ int64_t a = -100, b = 8; (uint64_t)(a / b); }), (uint64_t)(-12));
+
+    TEST("DIV divide by zero -> -1",
+         ({ int64_t a = 123, b = 0; (uint64_t)(b == 0 ? -1 : a / b); }),
+         (uint64_t)-1);
+
+    //   DIVU
+    TEST("DIVU unsigned", ({ uint64_t a = 100, b = 7; a / b; }), 14);
+
+    TEST("DIVU divide by zero -> 2^64-1",
+         ({ uint64_t a = 100, b = 0; (b == 0) ? ~0ULL : a / b; }),
+         ~0ULL);
+
+    //   REM
+    TEST("REM signed", ({ int64_t a = -100, b = 30; (uint64_t)(a % b); }), (uint64_t)-10);
+
+    TEST("REM divide by zero -> dividend",
+         ({ int64_t a = 55, b = 0; (uint64_t)(b == 0 ? a : a % b); }),
+         55ULL);
+
+    //   REMU
+    TEST("REMU unsigned", ({ uint64_t a = 100, b = 30; a % b; }), 10);
+
+    TEST("REMU div0 -> dividend",
+         ({ uint64_t a = 77, b = 0; (b == 0 ? a : a % b); }),
+         77ULL);
     return 0;
 }
