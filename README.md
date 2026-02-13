@@ -10,6 +10,8 @@ The core has 1 Mib of RAM and the entrypoint is assumed to be 0x00000000
 
 Compile for this machine using `-mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld test/startup.rv64i.s`
 
+You may also use medany but will need to adjust the dram size.
+
 # using the library
 
 You can link agains rv64i like so:
