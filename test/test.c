@@ -149,10 +149,10 @@ int uECC_PRNG(uint8_t *dst, unsigned size) {
     do { \
         uint64_t result = (expr); \
         if (result != (expected)) { \
-            printf("FAIL: %s -> got %ld (0x%lx), expected %ld (0x%lx)\n", \
+            DBG("FAIL: %s -> got %ld (0x%lx), expected %ld (0x%lx)", \
                    name, (int64_t)result, result, (int64_t)(expected), (uint64_t)(expected)); \
         } else { \
-            printf("PASS: %s\n", name); \
+            DBG("PASS: %s", name); \
         } \
     } while (0)
 
