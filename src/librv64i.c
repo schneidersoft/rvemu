@@ -329,7 +329,7 @@ static int exec_SRAI(cpu_t *cpu, uint32_t inst) {
 }
 static int exec_SRAI_64(cpu_t *cpu, uint32_t inst) {
     uint64_t imm = imm_I(inst);// SRAI_64
-    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> imm;
+    cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] >> imm;
     return 0;
 }
 static int exec_ORI(cpu_t *cpu, uint32_t inst) {
