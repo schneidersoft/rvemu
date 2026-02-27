@@ -1,6 +1,6 @@
 # RVEMU
 
-An emulator for the risc-v 64bit integer core.
+RVEMU is an emulator for the risc-v 64bit integer core processor. It is written in C and has virtually no dependancies.
 
 # compiling code for this machine
 
@@ -14,7 +14,7 @@ You may also use medany but will need to adjust the dram size.
 
 # using the library
 
-You can link agains rv64i like so:
+You can link against rv64i like so:
 
 `gcc -Wall -Werror -I./test/ main.c bin/librv64i.a -o main`
 
