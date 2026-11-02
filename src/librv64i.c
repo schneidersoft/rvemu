@@ -163,7 +163,7 @@ static int exec_JAL(cpu_t *cpu, uint32_t inst) {
 static int exec_JALR(cpu_t *cpu, uint32_t inst) {
     uint64_t imm = imm_I(inst);
     uint64_t tmp = cpu->pc;
-    cpu->pc = (cpu->regs[rs1(inst)] + (int64_t)imm) & 0xfffffffe;
+    cpu->pc = (cpu->regs[rs1(inst)] + (int64_t)imm) & ~0x1ull;
     cpu->regs[rd(inst)] = tmp;
     if (ADDR_MISALIGNED(cpu->pc)) {
         //DBG("JAL pc address misalligned");
@@ -295,7 +295,7 @@ static int exec_SLLI_64(cpu_t *cpu, uint32_t inst) {
 }
 static int exec_SLTI(cpu_t *cpu, uint32_t inst) {
     uint64_t imm = imm_I(inst);
-    cpu->regs[rd(inst)] = (cpu->regs[rs1(inst)] < (int64_t)imm) ? 1 : 0;
+    cpu->regs[rd(inst)] = ((int64_t)cpu->regs[rs1(inst)] < (int64_t)imm) ? 1 : 0;
     return 0;
 }
 static int exec_SLTIU(cpu_t *cpu, uint32_t inst) {
@@ -313,23 +313,19 @@ static int exec_XORI(cpu_t *cpu, uint32_t inst) {
     return 0;
 }
 static int exec_SRLI(cpu_t *cpu, uint32_t inst) {
-    uint64_t imm = imm_I(inst);// SRLI
-    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> imm;
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> shamt(inst);
     return 0;
 }
 static int exec_SRLI_64(cpu_t *cpu, uint32_t inst) {
-    uint64_t imm = imm_I(inst);// SRLI_64
-    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> imm;
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> shamt(inst);
     return 0;
 }
 static int exec_SRAI(cpu_t *cpu, uint32_t inst) {
-    uint64_t imm = imm_I(inst);// SRAI
-    cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] >> imm;
+    cpu->regs[rd(inst)] = (uint64_t)((int64_t)cpu->regs[rs1(inst)] >> shamt(inst));
     return 0;
 }
 static int exec_SRAI_64(cpu_t *cpu, uint32_t inst) {
-    uint64_t imm = imm_I(inst);// SRAI_64
-    cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] >> imm;
+    cpu->regs[rd(inst)] = (uint64_t)((int64_t)cpu->regs[rs1(inst)] >> shamt(inst));
     return 0;
 }
 static int exec_ORI(cpu_t *cpu, uint32_t inst) {
@@ -343,15 +339,15 @@ static int exec_ANDI(cpu_t *cpu, uint32_t inst) {
     return 0;
 }
 static int exec_ADD(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = ((int64_t)cpu->regs[rs1(inst)] + (int64_t)cpu->regs[rs2(inst)]);
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] + cpu->regs[rs2(inst)];
     return 0;
 }
 static int exec_SUB(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = ((int64_t)cpu->regs[rs1(inst)] - (int64_t)cpu->regs[rs2(inst)]);
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] - cpu->regs[rs2(inst)];
     return 0;
 }
 static int exec_SLL(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] << (int64_t)cpu->regs[rs2(inst)];
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] << (cpu->regs[rs2(inst)] & 63);
     return 0;
 }
 static int exec_SLT(cpu_t *cpu, uint32_t inst) {
@@ -371,7 +367,7 @@ static int exec_XOR(cpu_t *cpu, uint32_t inst) {
     return 0;
 }
 static int exec_SRL(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> cpu->regs[rs2(inst)];
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] >> (cpu->regs[rs2(inst)] & 63);
     return 0;
 }
 static int exec_OR(cpu_t *cpu, uint32_t inst) {
@@ -394,83 +390,91 @@ static int exec_ECALL_EBREAK(cpu_t *cpu, uint32_t inst) {
 }
 static int exec_ADDIW(cpu_t *cpu, uint32_t inst) {
     uint64_t imm = imm_I(inst);
-    cpu->regs[rd(inst)] = ((int32_t)cpu->regs[rs1(inst)]) + (int32_t)imm;
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)((uint32_t)cpu->regs[rs1(inst)] + (uint32_t)imm);
     return 0;
 }
 static int exec_SLLIW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)(((uint32_t)cpu->regs[rs1(inst)]) << (shamt(inst) % 32));
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)(((uint32_t)cpu->regs[rs1(inst)]) << (shamt(inst) & 31));
     return 0;
 }
 static int exec_SRLIW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (uint64_t)(((uint32_t)cpu->regs[rs1(inst)]) >> (shamt(inst) % 32));
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)(((uint32_t)cpu->regs[rs1(inst)]) >> (shamt(inst) & 31));
     return 0;
 }
 static int exec_SRAIW(cpu_t *cpu, uint32_t inst) {
-    uint64_t imm = imm_I(inst);
-    cpu->regs[rd(inst)] = (int64_t)(((int32_t)cpu->regs[rs1(inst)]) >> (imm % 32));
+    cpu->regs[rd(inst)] = (int64_t)((int32_t)cpu->regs[rs1(inst)] >> (shamt(inst) & 31));
     return 0;
 }
 static int exec_ADDW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)(((int32_t)cpu->regs[rs1(inst)]) + (int32_t)cpu->regs[rs2(inst)]);
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)((uint32_t)cpu->regs[rs1(inst)] + (uint32_t)cpu->regs[rs2(inst)]);
     return 0;
 }
 static int exec_SUBW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)(((int32_t)cpu->regs[rs1(inst)]) - (int32_t)cpu->regs[rs2(inst)]);
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)((uint32_t)cpu->regs[rs1(inst)] - (uint32_t)cpu->regs[rs2(inst)]);
     return 0;
 }
 static int exec_SLLW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)((int32_t)(cpu->regs[rs1(inst)] << (cpu->regs[rs2(inst)] % 32)));
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)(((uint32_t)cpu->regs[rs1(inst)]) << (cpu->regs[rs2(inst)] & 31));
     return 0;
 }
 static int exec_SRLW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)((int32_t)(((uint32_t)cpu->regs[rs1(inst)]) >> (cpu->regs[rs2(inst)] % 32)));
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)(((uint32_t)cpu->regs[rs1(inst)]) >> (cpu->regs[rs2(inst)] & 31));
     return 0;
 }
 static int exec_SRAW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)((int32_t)(((int32_t)cpu->regs[rs1(inst)]) >> (cpu->regs[rs2(inst)] % 32)));
+    cpu->regs[rd(inst)] = (int64_t)((int32_t)cpu->regs[rs1(inst)] >> (cpu->regs[rs2(inst)] & 31));
     return 0;
 }
 static int exec_SRA(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)(((int64_t)cpu->regs[rs1(inst)]) >> (cpu->regs[rs2(inst)] % 32));
+    cpu->regs[rd(inst)] = (uint64_t)((int64_t)cpu->regs[rs1(inst)] >> (cpu->regs[rs2(inst)] & 63));
     return 0;
 }
 //
 // rv64 M extension
 //
 static int exec_DIV(cpu_t *cpu, uint32_t inst) {
-    if (cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] / (int64_t)cpu->regs[rs2(inst)];
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    int64_t sa = (int64_t)a, sb = (int64_t)b;
+    if (b == 0)
+        cpu->regs[rd(inst)] = (uint64_t)-1; /* all bits set */
+    else if (sa == INT64_MIN && sb == -1)
+        cpu->regs[rd(inst)] = (uint64_t)INT64_MIN; /* signed overflow */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(sa / sb);
     return 0;
 }
 static int exec_DIVU(cpu_t *cpu, uint32_t inst) {
-    if (cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] / cpu->regs[rs2(inst)];
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    if (b == 0)
+        cpu->regs[rd(inst)] = (uint64_t)-1; /* all bits set */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = a / b;
     return 0;
 }
 static int exec_DIVW(cpu_t *cpu, uint32_t inst) {
-    if ((int32_t)cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (int32_t)cpu->regs[rs1(inst)] / (int32_t)cpu->regs[rs2(inst)];
+    int32_t x = (int32_t)(uint32_t)cpu->regs[rs1(inst)], y = (int32_t)(uint32_t)cpu->regs[rs2(inst)];
+    if (y == 0)
+        cpu->regs[rd(inst)] = (uint64_t)(int64_t)(int32_t)~0u; /* all 32 quotient bits set, sign-extended */
+    else if (x == INT32_MIN && y == -1)
+        cpu->regs[rd(inst)] = (uint64_t)(int64_t)INT32_MIN; /* signed overflow */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(int64_t)(x / y);
     return 0;
 }
 static int exec_DIVUW(cpu_t *cpu, uint32_t inst) {
-    if ((uint32_t)cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (uint32_t)cpu->regs[rs1(inst)] / (uint32_t)cpu->regs[rs2(inst)];
+    uint32_t x = (uint32_t)cpu->regs[rs1(inst)], y = (uint32_t)cpu->regs[rs2(inst)];
+    if (y == 0)
+        cpu->regs[rd(inst)] = 0xffffffffull; /* all 32 quotient bits set, zero-extended */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(x / y);
     return 0;
 }
 static int exec_MUL(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] * (int64_t)cpu->regs[rs2(inst)];
+    cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] * cpu->regs[rs2(inst)];
     return 0;
 }
 static int exec_MULW(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (int64_t)((int32_t)cpu->regs[rs1(inst)] * (int32_t)cpu->regs[rs2(inst)]);
+    cpu->regs[rd(inst)] = (int64_t)(int32_t)((uint32_t)cpu->regs[rs1(inst)] * (uint32_t)cpu->regs[rs2(inst)]);
     return 0;
 }
 static int exec_MULH(cpu_t *cpu, uint32_t inst) {
@@ -486,31 +490,40 @@ static int exec_MULHSU(cpu_t *cpu, uint32_t inst) {
     return 0;
 }
 static int exec_REM(cpu_t *cpu, uint32_t inst) {
-    if (cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (int64_t)cpu->regs[rs1(inst)] % (int64_t)cpu->regs[rs2(inst)];
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    int64_t sa = (int64_t)a, sb = (int64_t)b;
+    if (b == 0)
+        cpu->regs[rd(inst)] = a; /* remainder is the dividend */
+    else if (sa == INT64_MIN && sb == -1)
+        cpu->regs[rd(inst)] = 0; /* signed overflow */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(sa % sb);
     return 0;
 }
 static int exec_REMU(cpu_t *cpu, uint32_t inst) {
-    if (cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = cpu->regs[rs1(inst)] % cpu->regs[rs2(inst)];
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    if (b == 0)
+        cpu->regs[rd(inst)] = a; /* remainder is the dividend */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = a % b;
     return 0;
 }
 static int exec_REMW(cpu_t *cpu, uint32_t inst) {
-    if ((int32_t)cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (int64_t)((int32_t)cpu->regs[rs1(inst)] % (int32_t)cpu->regs[rs2(inst)]);
+    int32_t x = (int32_t)(uint32_t)cpu->regs[rs1(inst)], y = (int32_t)(uint32_t)cpu->regs[rs2(inst)];
+    if (y == 0)
+        cpu->regs[rd(inst)] = (uint64_t)(int64_t)x; /* remainder is the dividend */
+    else if (x == INT32_MIN && y == -1)
+        cpu->regs[rd(inst)] = 0; /* signed overflow */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(int64_t)(x % y);
     return 0;
 }
 static int exec_REMUW(cpu_t *cpu, uint32_t inst) {
-    if ((uint32_t)cpu->regs[rs2(inst)] != 0)
-        cpu->regs[rd(inst)] = (uint32_t)cpu->regs[rs1(inst)] % (uint32_t)cpu->regs[rs2(inst)];
+    uint32_t x = (uint32_t)cpu->regs[rs1(inst)], y = (uint32_t)cpu->regs[rs2(inst)];
+    if (y == 0)
+        cpu->regs[rd(inst)] = (uint64_t)x; /* remainder is the dividend, zero-extended */
     else
-        cpu->regs[rd(inst)] = -1;
+        cpu->regs[rd(inst)] = (uint64_t)(x % y);
     return 0;
 }
 int exec_invalid(cpu_t *cpu, uint32_t inst) {
