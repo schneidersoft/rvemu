@@ -777,41 +777,6 @@ FILE *stdin;
 FILE *stdout;
 FILE *stderr;
 
-int printf(const char *format, ...) {
-    va_list va;
-    va_start(va, format);
-    char buffer[1];
-    const int ret = _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
-    va_end(va);
-    return ret;
-}
-
-int fprintf(FILE *_, const char *format, ...) {
-    (void)_;
-    va_list va;
-    va_start(va, format);
-    char buffer[1];
-    const int ret = _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
-    va_end(va);
-    return ret;
-}
-
-int sprintf(char *buffer, const char *format, ...) {
-    va_list va;
-    va_start(va, format);
-    const int ret = _vsnprintf(_out_buffer, buffer, (size_t)-1, format, va);
-    va_end(va);
-    return ret;
-}
-
-int snprintf(char *buffer, size_t count, const char *format, ...) {
-    va_list va;
-    va_start(va, format);
-    const int ret = _vsnprintf(_out_buffer, buffer, count, format, va);
-    va_end(va);
-    return ret;
-}
-
 int vprintf(const char *format, va_list va) {
     char buffer[1];
     return _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
@@ -819,11 +784,42 @@ int vprintf(const char *format, va_list va) {
 
 int vfprintf(FILE *_, const char *format, va_list va) {
     (void)_;
-    char buffer[1];
-    return _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
+    return vprintf(format, va);
 }
 
 int vsnprintf(char *buffer, size_t count, const char *format, va_list va) { return _vsnprintf(_out_buffer, buffer, count, format, va); }
+
+int printf(const char *format, ...) {
+    va_list va;
+    va_start(va, format);
+    const int ret = vprintf(format, va);
+    va_end(va);
+    return ret;
+}
+
+int fprintf(FILE *stream, const char *format, ...) {
+    va_list va;
+    va_start(va, format);
+    const int ret = vfprintf(stream, format, va);
+    va_end(va);
+    return ret;
+}
+
+int sprintf(char *buffer, const char *format, ...) {
+    va_list va;
+    va_start(va, format);
+    const int ret = vsnprintf(buffer, (size_t)-1, format, va);
+    va_end(va);
+    return ret;
+}
+
+int snprintf(char *buffer, size_t count, const char *format, ...) {
+    va_list va;
+    va_start(va, format);
+    const int ret = vsnprintf(buffer, count, format, va);
+    va_end(va);
+    return ret;
+}
 
 int fctprintf(void (*out)(char character, void *arg), void *arg, const char *format, ...) {
     va_list va;

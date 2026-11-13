@@ -12,6 +12,13 @@ Compile for this machine using `-mcmodel=medlow -march=rv64i -mabi=lp64 -T test/
 
 You may also use medany but will need to adjust the dram size.
 
+# bundled standard library
+
+`test/stdlib` contains the small set of standard headers and a minimal `stdio`
+implementation used by the bare-metal tests. Its declarations and exported
+stdio functions use the normal C names, so code built against it can also be
+linked against the system C library.
+
 # using the library
 
 You can link against rv64i like so:
