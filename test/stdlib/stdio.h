@@ -4,10 +4,6 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct __stdio_file FILE;
 
 #ifndef EOF
@@ -55,9 +51,5 @@ long _write(int fd, const void *buffer, size_t length);
 
 /* printf-style output through a caller supplied character function. */
 int fctprintf(void (*out)(char character, void *arg), void *arg, const char *format, ...);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
