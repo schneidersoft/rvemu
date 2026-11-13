@@ -19,6 +19,12 @@ implementation used by the bare-metal tests. Its declarations and exported
 stdio functions use the normal C names, so code built against it can also be
 linked against the system C library.
 
+`stdin`, `stdout`, and `stderr` are real buffered `FILE` streams backed by file
+descriptors 0, 1, and 2. `stdout` is line-buffered and `stderr` is unbuffered.
+`fprintf`, `fputc`, `fputs`, `fwrite`, `fflush`, `fgetc`, `fgets`, and `fread`
+operate on them. Ports provide the low-level `_read()` and `_write()` hooks;
+`test/platform.c` implements these with Linux syscalls for the guest tests.
+
 # using the library
 
 You can link against rv64i like so:

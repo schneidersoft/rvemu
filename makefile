@@ -1,8 +1,8 @@
 TESTSRC=
 TESTSRC+=test/test.c test/sha256.c test/aes.c test/dbg.c
 
-GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/stdlib/stdio.c
-SYSCALLTEST=test/startup.rv64i.s test/linux.c test/stdlib/stdio.c
+GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/platform.c test/stdlib/stdio.c
+SYSCALLTEST=test/startup.rv64i.s test/linux.c test/platform.c test/stdlib/stdio.c
 
 .PHONY: all test clean
 
@@ -37,13 +37,13 @@ bin/dbg.o: test/dbg.c test/dbg.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/linux.h
+bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/linux.h test/stdlib/stdio.h
 	@mkdir -p bin
 	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(GUESTTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/rtest.elf bin/rtest.bin
 	riscv64-unknown-elf-objdump -d bin/rtest.elf > bin/rtest.elf.disas
 
-bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/linux.h
+bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/linux.h test/stdlib/stdio.h
 	@mkdir -p bin
 	riscv64-unknown-elf-gcc -o bin/stest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(SYSCALLTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/stest.elf bin/stest.bin

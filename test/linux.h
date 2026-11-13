@@ -44,6 +44,7 @@ enum {
 
 enum {
     ENOENT = 2,
+    EINTR = 4,
     EFAULT = 14,
     ENOSYS = 38,
 };

@@ -46,10 +46,24 @@ int memcmp(const void *left, const void *right, size_t length) {
     return 0;
 }
 
-void _putchar(char character) { linux_write(1, &character, 1); }
-
 int main(void) {
     printf("STARTING SYSCALL TESTS\n");
+
+    // Standard streams are real FILE objects with buffered output.
+    check("fileno", fileno(stdin) == 0 && fileno(stdout) == 1 && fileno(stderr) == 2);
+    check("fprintf", fprintf(stdout, "fprintf works\n") > 0);
+    check("fprintf stderr", fprintf(stderr, "stderr works\n") > 0);
+    check("fputc", fputc('F', stdout) != EOF && fputc('\n', stdout) != EOF);
+    check("fputs", fputs("fputs works\n", stdout) >= 0);
+    check("fwrite", fwrite("fwrite works\n", 1, 13, stdout) == 13);
+    check("puts", puts("puts works") >= 0);
+    check("putchar", putchar('P') != EOF && putchar('\n') != EOF);
+    check("fflush", fflush(stdout) == 0);
+    check("stream state", feof(stdout) == 0 && ferror(stdout) == 0);
+    check("ungetc", ungetc('Z', stdin) == 'Z' && fgetc(stdin) == 'Z');
+
+    char empty[1];
+    check("fgets size 1", fgets(empty, 1, stdin) == empty && empty[0] == '\0');
 
     // File I/O is forwarded to the host filesystem.
     const char *path = "bin/syscall-test.tmp";
@@ -117,6 +131,7 @@ int main(void) {
     check("invalid pointer", linux_write(1, (void *)(uintptr_t)0x7fffffff, 1) == -EFAULT);
 
     printf("SYSCALL TESTS: %d failure(s)\n", failures);
+    fflush(NULL);
     linux_exit_group(failures ? 1 : 0);
     return 0;
 }

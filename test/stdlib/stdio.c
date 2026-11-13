@@ -89,16 +89,6 @@ static inline void _out_null(char character, void *buffer, size_t idx, size_t ma
     (void)maxlen;
 }
 
-// internal _putchar wrapper
-static inline void _out_char(char character, void *buffer, size_t idx, size_t maxlen) {
-    (void)buffer;
-    (void)idx;
-    (void)maxlen;
-    if (character) {
-        _putchar(character);
-    }
-}
-
 // internal output function wrapper
 static inline void _out_fct(char character, void *buffer, size_t idx, size_t maxlen) {
     (void)idx;
@@ -252,7 +242,6 @@ static size_t _ntoa_long_long(out_fct_type out, char *buffer, size_t idx, size_t
 
     return _ntoa_format(out, buffer, idx, maxlen, buf, len, negative, (unsigned int)base, prec, width, flags);
 }
-
 
 // forward declaration so that _ftoa can switch to exp notation for values >
 // MAX_FLOAT
@@ -770,22 +759,238 @@ static int _vsnprintf(out_fct_type out, char *buffer, const size_t maxlen, const
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// The stream objects are opaque in this implementation.  They exist so code
-// using the standard stdio API can be linked either against this library or
-// against the system C library.
-FILE *stdin;
-FILE *stdout;
-FILE *stderr;
+// Stream state.  FILE stays opaque in the public header.
+enum {
+    STREAM_BUFFER_SIZE = 256,
+    STREAM_READABLE = 1 << 0,
+    STREAM_WRITABLE = 1 << 1,
+    STREAM_LINE_BUFFERED = 1 << 2,
+    STREAM_UNBUFFERED = 1 << 3,
+    STREAM_EOF = 1 << 4,
+    STREAM_ERROR = 1 << 5,
+};
 
-int vprintf(const char *format, va_list va) {
-    char buffer[1];
-    return _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
+struct __stdio_file {
+    int fd;
+    unsigned int flags;
+    size_t read_pos;
+    size_t read_len;
+    size_t write_len;
+    int pushback;
+    char read_buffer[STREAM_BUFFER_SIZE];
+    char write_buffer[STREAM_BUFFER_SIZE];
+};
+
+static struct __stdio_file stdin_file = {0, STREAM_READABLE, 0, 0, 0, -1, {0}, {0}};
+static struct __stdio_file stdout_file = {1, STREAM_WRITABLE | STREAM_LINE_BUFFERED, 0, 0, 0, -1, {0}, {0}};
+static struct __stdio_file stderr_file = {2, STREAM_WRITABLE | STREAM_UNBUFFERED, 0, 0, 0, -1, {0}, {0}};
+
+FILE *stdin = &stdin_file;
+FILE *stdout = &stdout_file;
+FILE *stderr = &stderr_file;
+
+static int _flush_stream(FILE *stream) {
+    if (stream == NULL || !(stream->flags & STREAM_WRITABLE)) {
+        return 0;
+    }
+
+    size_t offset = 0;
+    while (offset < stream->write_len) {
+        long written = _write(stream->fd, stream->write_buffer + offset, stream->write_len - offset);
+        if (written <= 0) {
+            stream->flags |= STREAM_ERROR;
+            return EOF;
+        }
+        offset += (size_t)written;
+    }
+    stream->write_len = 0;
+    return 0;
 }
 
-int vfprintf(FILE *_, const char *format, va_list va) {
-    (void)_;
-    return vprintf(format, va);
+int fflush(FILE *stream) {
+    if (stream == NULL) {
+        int result = 0;
+        if (_flush_stream(stdout) == EOF) {
+            result = EOF;
+        }
+        if (_flush_stream(stderr) == EOF) {
+            result = EOF;
+        }
+        return result;
+    }
+    return _flush_stream(stream);
 }
+
+int fputc(int character, FILE *stream) {
+    if (stream == NULL || !(stream->flags & STREAM_WRITABLE)) {
+        return EOF;
+    }
+
+    unsigned char byte = (unsigned char)character;
+    if (stream->flags & STREAM_UNBUFFERED) {
+        if (_write(stream->fd, &byte, 1) != 1) {
+            stream->flags |= STREAM_ERROR;
+            return EOF;
+        }
+        return byte;
+    }
+
+    if (stream->write_len == STREAM_BUFFER_SIZE && _flush_stream(stream) == EOF) {
+        return EOF;
+    }
+    stream->write_buffer[stream->write_len++] = (char)byte;
+    if ((stream->flags & STREAM_LINE_BUFFERED) && byte == '\n') {
+        if (_flush_stream(stream) == EOF) {
+            return EOF;
+        }
+    }
+    return byte;
+}
+
+int putc(int character, FILE *stream) { return fputc(character, stream); }
+
+int putchar(int character) { return fputc(character, stdout); }
+
+void _putchar(char character) { (void)fputc((unsigned char)character, stdout); }
+
+int fputs(const char *string, FILE *stream) {
+    while (*string) {
+        if (fputc((unsigned char)*string++, stream) == EOF) {
+            return EOF;
+        }
+    }
+    return 0;
+}
+
+int puts(const char *string) {
+    if (fputs(string, stdout) == EOF) {
+        return EOF;
+    }
+    return fputc('\n', stdout) == EOF ? EOF : 0;
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t count, FILE *stream) {
+    const unsigned char *bytes = (const unsigned char *)ptr;
+    if (size == 0 || count == 0) {
+        return 0;
+    }
+
+    size_t total = size * count;
+    size_t written = 0;
+    while (written < total) {
+        if (fputc(bytes[written], stream) == EOF) {
+            break;
+        }
+        written++;
+    }
+    return written / size;
+}
+
+int fgetc(FILE *stream) {
+    if (stream == NULL || !(stream->flags & STREAM_READABLE)) {
+        return EOF;
+    }
+
+    if (stream->pushback >= 0) {
+        int character = stream->pushback;
+        stream->pushback = -1;
+        return character;
+    }
+
+    if (stream->read_pos == stream->read_len) {
+        long received = _read(stream->fd, stream->read_buffer, STREAM_BUFFER_SIZE);
+        if (received == 0) {
+            stream->flags |= STREAM_EOF;
+            return EOF;
+        }
+        if (received < 0) {
+            stream->flags |= STREAM_ERROR;
+            return EOF;
+        }
+        stream->read_len = (size_t)received;
+        stream->read_pos = 0;
+    }
+    return (unsigned char)stream->read_buffer[stream->read_pos++];
+}
+
+int getc(FILE *stream) { return fgetc(stream); }
+
+int getchar(void) { return fgetc(stdin); }
+
+int ungetc(int character, FILE *stream) {
+    if (character == EOF || stream == NULL || !(stream->flags & STREAM_READABLE)) {
+        return EOF;
+    }
+    stream->pushback = (unsigned char)character;
+    stream->flags &= ~STREAM_EOF;
+    return (unsigned char)character;
+}
+
+char *fgets(char *buffer, int size, FILE *stream) {
+    if (buffer == NULL || size <= 0) {
+        return NULL;
+    }
+
+    int index = 0;
+    while (index < size - 1) {
+        int character = fgetc(stream);
+        if (character == EOF) {
+            break;
+        }
+        buffer[index++] = (char)character;
+        if (character == '\n') {
+            break;
+        }
+    }
+    buffer[index] = '\0';
+    if (index > 0) {
+        return buffer;
+    }
+    return (feof(stream) || ferror(stream)) ? NULL : buffer;
+}
+
+size_t fread(void *ptr, size_t size, size_t count, FILE *stream) {
+    unsigned char *bytes = (unsigned char *)ptr;
+    if (size == 0 || count == 0) {
+        return 0;
+    }
+
+    size_t total = size * count;
+    size_t received = 0;
+    while (received < total) {
+        int character = fgetc(stream);
+        if (character == EOF) {
+            break;
+        }
+        bytes[received++] = (unsigned char)character;
+    }
+    return received / size;
+}
+
+int feof(FILE *stream) { return stream != NULL && (stream->flags & STREAM_EOF) != 0; }
+
+int ferror(FILE *stream) { return stream != NULL && (stream->flags & STREAM_ERROR) != 0; }
+
+void clearerr(FILE *stream) {
+    if (stream != NULL) {
+        stream->flags &= ~(STREAM_EOF | STREAM_ERROR);
+    }
+}
+
+int fileno(FILE *stream) { return stream != NULL ? stream->fd : -1; }
+
+// internal FILE output sink
+static inline void _out_file(char character, void *buffer, size_t idx, size_t maxlen) {
+    (void)idx;
+    (void)maxlen;
+    if (character) {
+        (void)fputc((unsigned char)character, (FILE *)buffer);
+    }
+}
+
+int vfprintf(FILE *stream, const char *format, va_list va) { return _vsnprintf(_out_file, (char *)stream, (size_t)-1, format, va); }
+
+int vprintf(const char *format, va_list va) { return vfprintf(stdout, format, va); }
 
 int vsnprintf(char *buffer, size_t count, const char *format, va_list va) { return _vsnprintf(_out_buffer, buffer, count, format, va); }
 
