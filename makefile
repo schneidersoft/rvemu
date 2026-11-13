@@ -8,10 +8,10 @@ TESTSRC+=test/dbg.c
 
 all: bin/riscv64i test
 
-test: bin/riscv64i bin/rv64i.bin bin/htest
+test: bin/riscv64i bin/rtest.bin bin/htest.elf
 	./bin/htest.elf
 	@echo "-------"
-	./bin/riscv64i bin/rv64i.bin
+	./bin/riscv64i bin/rtest.bin
 
 bin/riscv64i: bin/librv64i.a
 	@mkdir -p bin
@@ -26,13 +26,13 @@ bin/librv64i.o: src/librv64i.c
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/rv64i.bin:
+bin/rtest.bin:
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/rv64i.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld test/startup.rv64i.s test/sim.c $(TESTSRC) test/stdlib/stdio.c -lgcc
-	riscv64-unknown-elf-objcopy -O binary bin/rv64i.elf bin/rv64i.bin
-	riscv64-unknown-elf-objdump -d bin/rv64i.elf > bin/rv64i.elf.disas
+	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld test/startup.rv64i.s test/sim.c $(TESTSRC) test/stdlib/stdio.c -lgcc
+	riscv64-unknown-elf-objcopy -O binary bin/rtest.elf bin/rtest.bin
+	riscv64-unknown-elf-objdump -d bin/rtest.elf > bin/rtest.elf.disas
 
-bin/htest:
+bin/htest.elf:
 	@mkdir -p bin
 	gcc -ggdb -o bin/htest.elf -Wall -Werror  $(TESTSRC)
 
