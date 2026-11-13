@@ -4,22 +4,32 @@
 
 #include "dbg.h"
 #include "librv64i.h"
+#include "syscall.h"
 
-int read_file(cpu_t *cpu, char *filename) {
+long read_file(cpu_t *cpu, const char *filename) {
     FILE *file;
     uint8_t *buffer;
-    unsigned long fileLen;
+    long fileLen;
 
     // Open file
     file = fopen(filename, "rb");
     if (!file) {
-        fprintf(stderr, "Unable to open file %s", filename);
+        fprintf(stderr, "Unable to open file %s\n", filename);
         return -1;
     }
     // Get file length
-    fseek(file, 0, SEEK_END);
-    fileLen = ftell(file);
+    if (fseek(file, 0, SEEK_END) || (fileLen = ftell(file)) < 0) {
+        fprintf(stderr, "Unable to determine size of %s\n", filename);
+        fclose(file);
+        return -1;
+    }
     fseek(file, 0, SEEK_SET);
+
+    if (fileLen > DRAM_SIZE) {
+        fprintf(stderr, "File %s does not fit in %d bytes of DRAM\n", filename, DRAM_SIZE);
+        fclose(file);
+        return -1;
+    }
 
     // Allocate memory
     buffer = (uint8_t *)malloc(fileLen + 1);
@@ -29,46 +39,28 @@ int read_file(cpu_t *cpu, char *filename) {
         return -1;
     }
     // Read file contents into buffer
-    fread(buffer, fileLen, 1, file);
+    if (fread(buffer, fileLen, 1, file) != 1 && fileLen != 0) {
+        fprintf(stderr, "Unable to read %s\n", filename);
+        free(buffer);
+        fclose(file);
+        return -1;
+    }
     fclose(file);
 
     // copy the bin executable to dram
     memcpy(cpu->bus.dram.mem, buffer, fileLen * sizeof(uint8_t));
     free(buffer);
-    return 0;
-}
-
-void print_BUS_safe(struct cpu_t *cpu, uint64_t addr) {
-    // addr &= 0xffffffff;
-    fprintf(stderr, "::");
-    while (1) {
-        if (addr < DRAM_BASE) {
-            break;
-        }
-        if (addr >= DRAM_BASE + DRAM_SIZE) {
-            break;
-        }
-
-        int c = cpu->bus.dram.mem[(addr - DRAM_BASE)];
-        putc(c, stderr);
-        addr++;
-        if (c == '\0')
-            break;
-    }
-    putc('\n', stderr);
+    return fileLen;
 }
 
 int ECALL_cb(cpu_t *cpu, uint32_t inst) {
-    switch (cpu->regs[10]) {
-    case 0: print_BUS_safe(cpu, cpu->regs[11]); return 0;
-    case 1: exit(0); return 0;
-    case 2: fputc(cpu->regs[11], stderr); return 0;
-    default:
-        return -1;
-    }
+    (void)inst;
+    return syscall_dispatch(cpu);
 }
 
 int EBREAK_cb(cpu_t *cpu, uint32_t inst) {
+    (void)cpu;
+    (void)inst;
     exit(0);
     return 0;
 }
@@ -82,14 +74,21 @@ int INVOP_cb(cpu_t *cpu, uint32_t inst) {
 }
 
 int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "usage: %s <binary>\n", argv[0]);
+        return 1;
+    }
+
     cpu_t cpu;
     cpu_init(&cpu);
 
     // Read input file
-    if (read_file(&cpu, argv[1])) {
+    long image_size = read_file(&cpu, argv[1]);
+    if (image_size < 0) {
         DBG("LOAD FILE FAILED");
-        return -1;
+        return 1;
     }
+    syscall_init((uint64_t)image_size);
 
     // cpu loop
     do {

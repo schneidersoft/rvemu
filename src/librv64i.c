@@ -1,5 +1,7 @@
 #include "librv64i.h"
 
+#include <string.h>
+
 typedef __int128_t int128_t;
 typedef __uint128_t uint128_t;
 
@@ -80,6 +82,7 @@ void bus_store(bus_t *bus, uint64_t addr, uint64_t size, uint64_t value) {
 #define ADDR_MISALIGNED(addr) (addr & 0x3)
 
 void cpu_init(cpu_t *cpu) {
+    memset(cpu, 0, sizeof(*cpu));
     cpu->regs[0] = 0x00;                  // register x0 hardwired to 0
     cpu->regs[2] = DRAM_BASE + DRAM_SIZE; // Set stack pointer
     cpu->pc = DRAM_BASE;                  // Set program counter to the base address

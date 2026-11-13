@@ -27,9 +27,46 @@ You can link against rv64i like so:
 
 see riscv64i.c for an example implementation
 
-# syscall
+# syscalls
 
-This core does not support breakpoints. So you will need execute ebreak or ecall from C. console ouput and other syscalls can be achieved this way.
+Guest code can use the standard Linux RISC-V syscall ABI:
+
+- `a7` holds the syscall number.
+- `a0` through `a5` hold up to six arguments.
+- The result is returned in `a0`; failures are negative `errno` values (`-EFAULT`, `-ENOSYS`, and so on).
+
+The emulator forwards supported calls to the host operating system. Guest
+pointers are checked against the 1 MiB DRAM window before they are used, and
+invalid buffers produce `-EFAULT`.
+
+Every `ecall` is treated as a Linux syscall; there is no separate private
+ECALL ABI. Unknown syscall numbers, including 0, return `-ENOSYS`. `ebreak`
+exits successfully and is used by the test programs to terminate.
+
+The syscall proxy currently covers:
+
+- Files and descriptors: `read`, `write`, `readv`, `writev`, `pread64`,
+  `pwrite64`, `openat`, `close`, `lseek`, `dup`, `dup3`, `fcntl`, `ioctl`
+  (limited), `pipe2`, `getdents64`, `fstat`, `newfstatat`, `getcwd`, `chdir`,
+  `mkdirat`, `unlinkat`, `symlinkat`, `linkat`, `renameat`, `faccessat`.
+- Memory: `brk`, anonymous `mmap`, `munmap`, `mprotect`, `madvise`.
+- Time: `clock_gettime`, `clock_getres`, `gettimeofday`, `nanosleep`.
+- Process and system information: `getpid`, `getppid`, `getuid`, `geteuid`,
+  `getgid`, `getegid`, `gettid`, `uname`, `getrandom`, `sched_yield`,
+  `getrlimit`, `setrlimit`, `prlimit64`, `exit`, `exit_group`.
+
+Unsupported calls return `-ENOSYS`. Threads, signals, futexes, `clone`,
+`execve`, and loading unmodified Linux ELF binaries are not implemented.
+
+Paths are passed directly to the host filesystem, relative to the emulator's
+working directory. Guest code can therefore read and write host files.
+
+`brk` and anonymous `mmap` are backed by otherwise unused DRAM. They are simple
+bump allocations; there is no demand paging or reclaim.
+
+Set `RVEMU_TRACE_SYSCALLS=1` to print each syscall and its result to stderr.
+See `test/linux.c` and `test/linux.h` for a small freestanding example; it is
+built as `bin/stest.bin` and run by `make test`.
  
 # rv64im
 

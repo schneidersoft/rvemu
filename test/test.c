@@ -168,10 +168,6 @@ int main(void) {
     assert(x << 1 == 8);
     const char *msg = "Hello World"; // a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e
     assert(strlen(msg) == 11);
-    // char tmp[1024];
-    // bintohex(msg, 12, tmp, 1024);
-    // tmp[25] = 0;
-    // ecall(ECALL_DEBUG, tmp, -1);
 
     char hash[32];
     sha256 sha;
