@@ -59,9 +59,8 @@ int ECALL_cb(cpu_t *cpu, uint32_t inst) {
 }
 
 int EBREAK_cb(cpu_t *cpu, uint32_t inst) {
-    (void)cpu;
     (void)inst;
-    exit(0);
+    exit((int)(int32_t)cpu->regs[10]);
     return 0;
 }
 

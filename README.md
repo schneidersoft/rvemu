@@ -25,6 +25,13 @@ descriptors 0, 1, and 2. `stdout` is line-buffered and `stderr` is unbuffered.
 operate on them. Ports provide the low-level `_read()` and `_write()` hooks;
 `test/platform.c` implements these with Linux syscalls for the guest tests.
 
+The same directory also provides `string.h`, `stdlib.h` (`exit`, `atoi`,
+`perror`, `strerror`), `unistd.h`, `time.h`/`sys/time.h`, and a small BSD socket
+layer (`sys/socket.h`, `netdb.h`, `errno.h`). `getaddrinfo` is backed by a stub
+DNS resolver that reads `/etc/resolv.conf` and falls back to `8.8.8.8` and
+`1.1.1.1`; see `test/net.c`, which `make net` builds and runs against the host
+network.
+
 # using the library
 
 You can link against rv64i like so:
@@ -47,7 +54,8 @@ invalid buffers produce `-EFAULT`.
 
 Every `ecall` is treated as a Linux syscall; there is no separate private
 ECALL ABI. Unknown syscall numbers, including 0, return `-ENOSYS`. `ebreak`
-exits successfully and is used by the test programs to terminate.
+terminates the emulator with the value in `a0` (the guest `main` result), so
+failing test programs make `make` fail.
 
 The syscall proxy currently covers:
 
@@ -57,6 +65,10 @@ The syscall proxy currently covers:
   `mkdirat`, `unlinkat`, `symlinkat`, `linkat`, `renameat`, `faccessat`.
 - Memory: `brk`, anonymous `mmap`, `munmap`, `mprotect`, `madvise`.
 - Time: `clock_gettime`, `clock_getres`, `gettimeofday`, `nanosleep`.
+- Network: `socket`, `connect`, `sendto`, `recvfrom`, `setsockopt`,
+  `getsockopt`, `shutdown`. Address and option buffers are copied between guest
+  and host memory, and the remaining stream socket calls are expressed through
+  `sendto`/`recvfrom` with a null destination.
 - Process and system information: `getpid`, `getppid`, `getuid`, `geteuid`,
   `getgid`, `getegid`, `gettid`, `uname`, `getrandom`, `sched_yield`,
   `getrlimit`, `setrlimit`, `prlimit64`, `exit`, `exit_group`.

@@ -19,6 +19,13 @@ enum {
     SYS_gettimeofday = 169,
     SYS_getpid = 172,
     SYS_getuid = 174,
+    SYS_socket = 198,
+    SYS_connect = 203,
+    SYS_sendto = 206,
+    SYS_recvfrom = 207,
+    SYS_setsockopt = 208,
+    SYS_getsockopt = 209,
+    SYS_shutdown = 210,
     SYS_brk = 214,
     SYS_mmap = 222,
     SYS_getrandom = 278,
@@ -42,11 +49,42 @@ enum {
     CLOCK_REALTIME = 0,
 };
 
+/* Linux asm-generic error numbers (arch-independent). */
 enum {
+    EPERM = 1,
     ENOENT = 2,
     EINTR = 4,
+    EIO = 5,
+    EBADF = 9,
+    EAGAIN = 11,
+    EWOULDBLOCK = EAGAIN,
+    ENOMEM = 12,
+    EACCES = 13,
     EFAULT = 14,
+    EINVAL = 22,
+    ENFILE = 23,
+    EMFILE = 24,
+    EPIPE = 32,
+    ENAMETOOLONG = 36,
     ENOSYS = 38,
+    ENOTSOCK = 88,
+    EPROTONOSUPPORT = 93,
+    EOPNOTSUPP = 95,
+    EAFNOSUPPORT = 97,
+    EADDRINUSE = 98,
+    EADDRNOTAVAIL = 99,
+    ENETDOWN = 100,
+    ENETUNREACH = 101,
+    ECONNRESET = 104,
+    ENOBUFS = 105,
+    EISCONN = 106,
+    ENOTCONN = 107,
+    ETIMEDOUT = 110,
+    ECONNREFUSED = 111,
+    EHOSTDOWN = 112,
+    EHOSTUNREACH = 113,
+    EALREADY = 114,
+    EINPROGRESS = 115,
 };
 
 struct linux_timespec {
@@ -137,6 +175,30 @@ static inline long linux_mmap(void *address, unsigned long length, int prot, int
 static inline long linux_getrandom(void *buffer, unsigned long length, unsigned int flags) {
     return linux_syscall(SYS_getrandom, (long)(uintptr_t)buffer, (long)length, (long)flags, 0, 0, 0);
 }
+
+static inline long linux_socket(int domain, int type, int protocol) { return linux_syscall(SYS_socket, domain, type, protocol, 0, 0, 0); }
+
+static inline long linux_connect(int fd, const void *address, long length) {
+    return linux_syscall(SYS_connect, fd, (long)(uintptr_t)address, length, 0, 0, 0);
+}
+
+static inline long linux_sendto(int fd, const void *buffer, unsigned long length, int flags, const void *destination, long destination_length) {
+    return linux_syscall(SYS_sendto, fd, (long)(uintptr_t)buffer, (long)length, flags, (long)(uintptr_t)destination, destination_length);
+}
+
+static inline long linux_recvfrom(int fd, void *buffer, unsigned long length, int flags, void *source, long source_length) {
+    return linux_syscall(SYS_recvfrom, fd, (long)(uintptr_t)buffer, (long)length, flags, (long)(uintptr_t)source, source_length);
+}
+
+static inline long linux_setsockopt(int fd, int level, int option, const void *value, long length) {
+    return linux_syscall(SYS_setsockopt, fd, level, option, (long)(uintptr_t)value, length, 0);
+}
+
+static inline long linux_getsockopt(int fd, int level, int option, void *value, void *length) {
+    return linux_syscall(SYS_getsockopt, fd, level, option, (long)(uintptr_t)value, (long)(uintptr_t)length, 0);
+}
+
+static inline long linux_shutdown(int fd, int how) { return linux_syscall(SYS_shutdown, fd, how, 0, 0, 0, 0); }
 
 static inline void linux_exit_group(int status) {
     linux_syscall(SYS_exit_group, status, 0, 0, 0, 0, 0);

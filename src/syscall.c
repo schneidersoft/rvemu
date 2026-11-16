@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <sys/random.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -71,6 +72,13 @@ enum {
     RV_SYS_getgid = 176,
     RV_SYS_getegid = 177,
     RV_SYS_gettid = 178,
+    RV_SYS_socket = 198,
+    RV_SYS_connect = 203,
+    RV_SYS_sendto = 206,
+    RV_SYS_recvfrom = 207,
+    RV_SYS_setsockopt = 208,
+    RV_SYS_getsockopt = 209,
+    RV_SYS_shutdown = 210,
     RV_SYS_brk = 214,
     RV_SYS_munmap = 215,
     RV_SYS_clone = 220,
@@ -89,6 +97,8 @@ enum {
     RV_MAP_ANONYMOUS = 0x20,
     RV_PAGE_SIZE = 4096,
     RV_MAX_IOV = 1024,
+    RV_MAX_SOCKADDR = 128,
+    RV_MAX_SOCKET_OPTION = 128,
 };
 
 struct rv_timespec {
@@ -749,6 +759,106 @@ static int sys_getrandom(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
+static int sys_socket(cpu_t *cpu, const uint64_t args[6]) {
+    return host_result(cpu, socket((int)args[0], (int)args[1], (int)args[2]));
+}
+
+static int sys_connect(cpu_t *cpu, const uint64_t args[6]) {
+    uint8_t address[RV_MAX_SOCKADDR];
+    uint64_t length = args[2] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[2];
+
+    if (args[1] == 0) {
+        return fail(cpu, EFAULT);
+    }
+    if (guest_read(cpu, args[1], address, length) < 0) {
+        return fail(cpu, EFAULT);
+    }
+    return host_result(cpu, connect((int)args[0], (const struct sockaddr *)address, (socklen_t)length));
+}
+
+static int sys_sendto(cpu_t *cpu, const uint64_t args[6]) {
+    uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
+    uint8_t address[RV_MAX_SOCKADDR];
+    const struct sockaddr *destination = NULL;
+    uint64_t length = 0;
+
+    if (buffer == NULL) {
+        return fail(cpu, EFAULT);
+    }
+    if (args[4] != 0) {
+        length = args[5] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[5];
+        if (guest_read(cpu, args[4], address, length) < 0) {
+            return fail(cpu, EFAULT);
+        }
+        destination = (const struct sockaddr *)address;
+    }
+    return host_result(cpu, sendto((int)args[0], buffer, (size_t)args[2], (int)args[3], destination, (socklen_t)length));
+}
+
+static int sys_recvfrom(cpu_t *cpu, const uint64_t args[6]) {
+    uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
+    uint8_t address[RV_MAX_SOCKADDR];
+    socklen_t address_length;
+    long result;
+
+    if (buffer == NULL) {
+        return fail(cpu, EFAULT);
+    }
+    address_length = args[5] > RV_MAX_SOCKADDR ? (socklen_t)RV_MAX_SOCKADDR : (socklen_t)args[5];
+    result = (long)recvfrom((int)args[0], buffer, (size_t)args[2], (int)args[3], (struct sockaddr *)address, &address_length);
+    if (result >= 0 && args[4] != 0 && address_length > 0) {
+        if (guest_write(cpu, args[4], address, address_length) < 0) {
+            return fail(cpu, EFAULT);
+        }
+    }
+    return host_result(cpu, result);
+}
+
+static int sys_setsockopt(cpu_t *cpu, const uint64_t args[6]) {
+    uint8_t value[RV_MAX_SOCKET_OPTION];
+    uint64_t length = args[4] > RV_MAX_SOCKET_OPTION ? RV_MAX_SOCKET_OPTION : args[4];
+
+    if (length > 0) {
+        if (args[3] == 0 || guest_read(cpu, args[3], value, length) < 0) {
+            return fail(cpu, EFAULT);
+        }
+    }
+    return host_result(cpu, setsockopt((int)args[0], (int)args[1], (int)args[2], value, (socklen_t)length));
+}
+
+static int sys_getsockopt(cpu_t *cpu, const uint64_t args[6]) {
+    uint8_t value[RV_MAX_SOCKET_OPTION];
+    int32_t guest_length;
+    socklen_t length;
+
+    if (args[3] == 0 || args[4] == 0) {
+        return fail(cpu, EFAULT);
+    }
+    if (guest_read(cpu, args[4], &guest_length, sizeof(guest_length)) < 0) {
+        return fail(cpu, EFAULT);
+    }
+    if (guest_length < 0) {
+        return fail(cpu, EINVAL);
+    }
+    length = (socklen_t)guest_length;
+    if (length > RV_MAX_SOCKET_OPTION) {
+        length = RV_MAX_SOCKET_OPTION;
+    }
+    if (getsockopt((int)args[0], (int)args[1], (int)args[2], value, &length) < 0) {
+        return fail(cpu, errno);
+    }
+    if (length > 0 && guest_write(cpu, args[3], value, length) < 0) {
+        return fail(cpu, EFAULT);
+    }
+    guest_length = (int32_t)length;
+    if (guest_write(cpu, args[4], &guest_length, sizeof(guest_length)) < 0) {
+        return fail(cpu, EFAULT);
+    }
+    return finish(cpu, 0);
+}
+
+static int sys_shutdown(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, shutdown((int)args[0], (int)args[1])); }
+
 static int sys_set_tid_address(cpu_t *cpu, const uint64_t args[6]) {
     (void)args;
 #ifdef SYS_gettid
@@ -809,6 +919,13 @@ static const struct {
     {RV_SYS_madvise, sys_madvise},
     {RV_SYS_prlimit64, sys_prlimit64},
     {RV_SYS_getrandom, sys_getrandom},
+    {RV_SYS_socket, sys_socket},
+    {RV_SYS_connect, sys_connect},
+    {RV_SYS_sendto, sys_sendto},
+    {RV_SYS_recvfrom, sys_recvfrom},
+    {RV_SYS_setsockopt, sys_setsockopt},
+    {RV_SYS_getsockopt, sys_getsockopt},
+    {RV_SYS_shutdown, sys_shutdown},
 };
 /* clang-format on */
 

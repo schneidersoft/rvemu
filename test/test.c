@@ -7,36 +7,6 @@
 #include "aes.h"
 #include "sha256.h"
 
-unsigned long int strlen(const char *f) {
-    int i = 0;
-    while (f[i] != 0)
-        i++;
-    return i;
-}
-
-void *memcpy(void *dest, const void *src, size_t n) {
-    while (n--)
-        ((uint8_t *)dest)[n] = ((uint8_t *)src)[n];
-    return dest;
-}
-
-int memcmp(const void *s1, const void *s2, size_t n) {
-    uint8_t *p1 = (uint8_t *)s1;
-    uint8_t *p2 = (uint8_t *)s2;
-    while (n--) {
-        if (*p1 == *p2) {
-            /* same */
-        } else if (*p1 < *p2) {
-            return -1;
-        } else {
-            return 1;
-        }
-        p1++;
-        p2++;
-    }
-    return 0;
-}
-
 void bintohex(const uint8_t *bin, int binlen, char *out, int outlen) {
     const char lk[] = "0123456789abcdef";
     for (int i = 0; i < binlen; i++) {

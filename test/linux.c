@@ -15,37 +15,6 @@ static void check(const char *name, int condition) {
     }
 }
 
-/* Keep the test binary freestanding: the guest has no C library. */
-void *memcpy(void *destination, const void *source, size_t length) {
-    uint8_t *to = destination;
-    const uint8_t *from = source;
-    while (length--) {
-        *to++ = *from++;
-    }
-    return destination;
-}
-
-void *memset(void *destination, int value, size_t length) {
-    uint8_t *to = destination;
-    while (length--) {
-        *to++ = (uint8_t)value;
-    }
-    return destination;
-}
-
-int memcmp(const void *left, const void *right, size_t length) {
-    const uint8_t *a = left;
-    const uint8_t *b = right;
-    while (length--) {
-        if (*a != *b) {
-            return *a < *b ? -1 : 1;
-        }
-        a++;
-        b++;
-    }
-    return 0;
-}
-
 int main(void) {
     printf("STARTING SYSCALL TESTS\n");
 
