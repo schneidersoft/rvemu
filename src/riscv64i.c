@@ -56,17 +56,25 @@ uint64_t read_file(cpu_t *cpu, const char *filename) {
 /* Guest process memory state (brk/mmap), paired with the cpu instance in main(). */
 static sysstate_t sys;
 static cpu_t cpu;
-static int guest_exited = 0;    // set by app_exit to signal a graceful guest exit
-static int guest_exit_code = 0; // set by app_exit so the host exits with the guest's status
+static int guest_exited = 0;    // set on a graceful guest exit (exit syscall or ebreak)
+static int guest_exit_code = 0; // exit status reported back from the guest
+
+// Every termination path reports through here, sets the guest's exit status,
+// and returns non-zero to halt the run loop — the host process is only ever
+// ended by main() returning, never by the core or syscall layers.
+// (a0/regs[10] carries the status for both the exit syscall and ebreak.)
+static int end_guest(cpu_t *cpu, const char *via) {
+    guest_exited = 1;
+    guest_exit_code = (int)(int32_t)cpu->regs[10];
+    printf("[host] guest exited (%s) with code %d\n", via, guest_exit_code);
+    fflush(stdout);
+    return 1;
+}
 
 static int app_exit(cpu_t *cpu, sysstate_t *s, const uint64_t args[6]) {
-    guest_exited = 1;
-    guest_exit_code = (int)(int32_t)args[0];
-    printf("[host] guest exited with code %d\n", guest_exit_code);
-    fflush(stdout);
-    (void)cpu;
     (void)s;
-    return 1; // non-zero halts the run loop in main
+    (void)args;
+    return end_guest(cpu, "exit");
 }
 
 static int ecall_cb(cpu_t *cpu, uint32_t inst) {
@@ -76,8 +84,7 @@ static int ecall_cb(cpu_t *cpu, uint32_t inst) {
 
 static int ebreak_cb(cpu_t *cpu, uint32_t inst) {
     (void)inst;
-    exit((int)(int32_t)cpu->regs[10]);
-    return 0;
+    return end_guest(cpu, "ebreak");
 }
 
 static int invop_cb(cpu_t *cpu, uint32_t inst) {
