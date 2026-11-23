@@ -154,7 +154,7 @@ struct rv_stat {
     uint32_t __unused5;
 };
 
-typedef int (*syscall_fn)(cpu_t *cpu, const uint64_t args[6]);
+typedef int (*syscall_fn)(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]);
 
 static int finish(cpu_t *cpu, int64_t value) {
     cpu->regs[10] = (uint64_t)value;
@@ -254,7 +254,7 @@ static void timespec_from_host(struct rv_timespec *destination, const struct tim
     destination->tv_nsec = (int64_t)source->tv_nsec;
 }
 
-static int sys_read(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_read(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -262,7 +262,7 @@ static int sys_read(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, retry_read((int)args[0], buffer, (size_t)args[2]));
 }
 
-static int sys_write(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_write(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -270,7 +270,7 @@ static int sys_write(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, retry_write((int)args[0], buffer, (size_t)args[2]));
 }
 
-static int sys_readv(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_readv(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (args[2] > RV_MAX_IOV) {
         return fail(cpu, EINVAL);
     }
@@ -300,7 +300,7 @@ static int sys_readv(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
-static int sys_writev(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_writev(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (args[2] > RV_MAX_IOV) {
         return fail(cpu, EINVAL);
     }
@@ -330,7 +330,7 @@ static int sys_writev(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
-static int sys_pread64(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_pread64(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -338,7 +338,7 @@ static int sys_pread64(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, (long)pread((int)args[0], buffer, (size_t)args[2], (off_t)args[3]));
 }
 
-static int sys_pwrite64(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_pwrite64(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -346,7 +346,7 @@ static int sys_pwrite64(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, (long)pwrite((int)args[0], buffer, (size_t)args[2], (off_t)args[3]));
 }
 
-static int sys_openat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_openat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[1]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -354,15 +354,15 @@ static int sys_openat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, openat((int)args[0], path, (int)args[2], (mode_t)args[3]));
 }
 
-static int sys_close(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, close((int)args[0])); }
+static int sys_close(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) { return host_result(cpu, close((int)args[0])); }
 
-static int sys_lseek(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, (long)lseek((int)args[0], (off_t)args[1], (int)args[2])); }
+static int sys_lseek(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) { return host_result(cpu, (long)lseek((int)args[0], (off_t)args[1], (int)args[2])); }
 
-static int sys_dup(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, dup((int)args[0])); }
+static int sys_dup(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) { return host_result(cpu, dup((int)args[0])); }
 
-static int sys_dup3(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, dup3((int)args[0], (int)args[1], (int)args[2])); }
+static int sys_dup3(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) { return host_result(cpu, dup3((int)args[0], (int)args[1], (int)args[2])); }
 
-static int sys_fcntl(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_fcntl(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     int command = (int)args[1];
     switch (command) {
     case F_DUPFD:
@@ -381,7 +381,7 @@ static int sys_fcntl(cpu_t *cpu, const uint64_t args[6]) {
     }
 }
 
-static int sys_fstat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_fstat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct stat host_stat;
     if (fstat((int)args[0], &host_stat) < 0) {
         return fail(cpu, errno);
@@ -394,7 +394,7 @@ static int sys_fstat(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_newfstatat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_newfstatat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[1]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -411,7 +411,7 @@ static int sys_newfstatat(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_getcwd(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_getcwd(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     char *cwd = getcwd(NULL, 0);
     if (cwd == NULL) {
         return fail(cpu, errno);
@@ -425,7 +425,7 @@ static int sys_getcwd(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, (int64_t)length);
 }
 
-static int sys_chdir(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_chdir(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[0]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -433,7 +433,7 @@ static int sys_chdir(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, chdir(path));
 }
 
-static int sys_mkdirat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_mkdirat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[1]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -441,7 +441,7 @@ static int sys_mkdirat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, mkdirat((int)args[0], path, (mode_t)args[2]));
 }
 
-static int sys_unlinkat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_unlinkat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[1]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -449,7 +449,7 @@ static int sys_unlinkat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, unlinkat((int)args[0], path, (int)args[2]));
 }
 
-static int sys_symlinkat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_symlinkat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *target = guest_string(cpu, args[0]);
     const char *linkpath = guest_string(cpu, args[2]);
     if (target == NULL || linkpath == NULL) {
@@ -458,7 +458,7 @@ static int sys_symlinkat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, symlinkat(target, (int)args[1], linkpath));
 }
 
-static int sys_linkat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_linkat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *oldpath = guest_string(cpu, args[1]);
     const char *newpath = guest_string(cpu, args[3]);
     if (oldpath == NULL || newpath == NULL) {
@@ -467,7 +467,7 @@ static int sys_linkat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, linkat((int)args[0], oldpath, (int)args[2], newpath, (int)args[4]));
 }
 
-static int sys_renameat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_renameat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *oldpath = guest_string(cpu, args[1]);
     const char *newpath = guest_string(cpu, args[3]);
     if (oldpath == NULL || newpath == NULL) {
@@ -476,7 +476,7 @@ static int sys_renameat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, renameat((int)args[0], oldpath, (int)args[2], newpath));
 }
 
-static int sys_faccessat(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_faccessat(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     const char *path = guest_string(cpu, args[1]);
     if (path == NULL) {
         return fail(cpu, EFAULT);
@@ -484,7 +484,7 @@ static int sys_faccessat(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, faccessat((int)args[0], path, (int)args[2], (int)args[3]));
 }
 
-static int sys_pipe2(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_pipe2(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     int host_fds[2];
     if (pipe2(host_fds, (int)args[1]) < 0) {
         return fail(cpu, errno);
@@ -498,7 +498,7 @@ static int sys_pipe2(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_getdents64(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_getdents64(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -511,7 +511,7 @@ static int sys_getdents64(cpu_t *cpu, const uint64_t args[6]) {
 #endif
 }
 
-static int sys_ioctl(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_ioctl(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     unsigned long request = (unsigned long)args[1];
     if (request == TIOCGWINSZ) {
         struct winsize window;
@@ -536,7 +536,7 @@ static int sys_ioctl(cpu_t *cpu, const uint64_t args[6]) {
     return fail(cpu, ENOSYS);
 }
 
-static int sys_clock_gettime(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_clock_gettime(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct timespec host_time;
     if (clock_gettime((clockid_t)args[0], &host_time) < 0) {
         return fail(cpu, errno);
@@ -549,7 +549,7 @@ static int sys_clock_gettime(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_clock_getres(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_clock_getres(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct timespec host_time;
     if (clock_getres((clockid_t)args[0], &host_time) < 0) {
         return fail(cpu, errno);
@@ -564,7 +564,7 @@ static int sys_clock_getres(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_gettimeofday(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_gettimeofday(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct timeval host_time;
     if (gettimeofday(&host_time, NULL) < 0) {
         return fail(cpu, errno);
@@ -578,7 +578,7 @@ static int sys_gettimeofday(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_nanosleep(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_nanosleep(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct rv_timespec guest_request;
     if (guest_read(cpu, args[0], &guest_request, sizeof(guest_request)) < 0) {
         return fail(cpu, EFAULT);
@@ -598,7 +598,7 @@ static int sys_nanosleep(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_getrlimit(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_getrlimit(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct rlimit host_limit;
     if (getrlimit((int)args[0], &host_limit) < 0) {
         return fail(cpu, errno);
@@ -610,7 +610,7 @@ static int sys_getrlimit(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_setrlimit(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_setrlimit(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct rv_rlimit guest_limit;
     if (guest_read(cpu, args[1], &guest_limit, sizeof(guest_limit)) < 0) {
         return fail(cpu, EFAULT);
@@ -619,7 +619,7 @@ static int sys_setrlimit(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, setrlimit((int)args[0], &host_limit));
 }
 
-static int sys_prlimit64(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_prlimit64(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct rlimit host_new;
     struct rlimit host_old;
     struct rlimit *new_limit = NULL;
@@ -652,29 +652,29 @@ static int sys_prlimit64(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_brk(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_brk(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint64_t requested = args[0];
     if (requested == 0) {
-        return finish(cpu, (int64_t)cpu->sys.brk);
+        return finish(cpu, (int64_t)sys->brk);
     }
-    if (requested < cpu->sys.brk_base) {
-        return finish(cpu, (int64_t)cpu->sys.brk);
+    if (requested < sys->brk_base) {
+        return finish(cpu, (int64_t)sys->brk);
     }
-    if (requested > cpu->sys.mmap_top) {
+    if (requested > sys->mmap_top) {
         return fail(cpu, ENOMEM);
     }
-    if (requested > cpu->sys.brk) {
-        uint8_t *start = guest_bytes(cpu, cpu->sys.brk, requested - cpu->sys.brk);
+    if (requested > sys->brk) {
+        uint8_t *start = guest_bytes(cpu, sys->brk, requested - sys->brk);
         if (start == NULL) {
             return fail(cpu, ENOMEM);
         }
-        memset(start, 0, requested - cpu->sys.brk);
+        memset(start, 0, requested - sys->brk);
     }
-    cpu->sys.brk = requested;
-    return finish(cpu, (int64_t)cpu->sys.brk);
+    sys->brk = requested;
+    return finish(cpu, (int64_t)sys->brk);
 }
 
-static int sys_mmap(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_mmap(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint64_t length = align_up(args[1], RV_PAGE_SIZE);
     if (length == 0) {
         return fail(cpu, EINVAL);
@@ -685,41 +685,41 @@ static int sys_mmap(cpu_t *cpu, const uint64_t args[6]) {
     if ((args[3] & RV_MAP_FIXED) != 0) {
         return fail(cpu, ENOSYS);
     }
-    if (length > cpu->sys.mmap_top - cpu->sys.brk) {
+    if (length > sys->mmap_top - sys->brk) {
         return fail(cpu, ENOMEM);
     }
-    cpu->sys.mmap_top -= length;
-    uint8_t *memory = guest_bytes(cpu, cpu->sys.mmap_top, length);
+    sys->mmap_top -= length;
+    uint8_t *memory = guest_bytes(cpu, sys->mmap_top, length);
     if (memory == NULL) {
-        cpu->sys.mmap_top += length;
+        sys->mmap_top += length;
         return fail(cpu, ENOMEM);
     }
     memset(memory, 0, length);
-    return finish(cpu, (int64_t)cpu->sys.mmap_top);
+    return finish(cpu, (int64_t)sys->mmap_top);
 }
 
-static int sys_munmap(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_munmap(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (guest_bytes(cpu, args[0], args[1]) == NULL) {
         return fail(cpu, EINVAL);
     }
     return finish(cpu, 0);
 }
 
-static int sys_mprotect(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_mprotect(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (guest_bytes(cpu, args[0], args[1]) == NULL) {
         return fail(cpu, EINVAL);
     }
     return finish(cpu, 0);
 }
 
-static int sys_madvise(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_madvise(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (guest_bytes(cpu, args[0], args[1]) == NULL) {
         return fail(cpu, EINVAL);
     }
     return finish(cpu, 0);
 }
 
-static int sys_uname(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_uname(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     struct utsname host_name;
     if (uname(&host_name) < 0) {
         return fail(cpu, errno);
@@ -740,7 +740,7 @@ static int sys_uname(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_getrandom(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_getrandom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[0], args[1]);
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
@@ -752,11 +752,11 @@ static int sys_getrandom(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
-static int sys_socket(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_socket(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     return host_result(cpu, socket((int)args[0], (int)args[1], (int)args[2]));
 }
 
-static int sys_connect(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_connect(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t address[RV_MAX_SOCKADDR];
     uint64_t length = args[2] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[2];
 
@@ -769,7 +769,7 @@ static int sys_connect(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, connect((int)args[0], (const struct sockaddr *)address, (socklen_t)length));
 }
 
-static int sys_sendto(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_sendto(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     uint8_t address[RV_MAX_SOCKADDR];
     const struct sockaddr *destination = NULL;
@@ -788,7 +788,7 @@ static int sys_sendto(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, sendto((int)args[0], buffer, (size_t)args[2], (int)args[3], destination, (socklen_t)length));
 }
 
-static int sys_recvfrom(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_recvfrom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     uint8_t address[RV_MAX_SOCKADDR];
     socklen_t address_length;
@@ -807,7 +807,7 @@ static int sys_recvfrom(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
-static int sys_setsockopt(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_setsockopt(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t value[RV_MAX_SOCKET_OPTION];
     uint64_t length = args[4] > RV_MAX_SOCKET_OPTION ? RV_MAX_SOCKET_OPTION : args[4];
 
@@ -819,7 +819,7 @@ static int sys_setsockopt(cpu_t *cpu, const uint64_t args[6]) {
     return host_result(cpu, setsockopt((int)args[0], (int)args[1], (int)args[2], value, (socklen_t)length));
 }
 
-static int sys_getsockopt(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_getsockopt(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t value[RV_MAX_SOCKET_OPTION];
     int32_t guest_length;
     socklen_t length;
@@ -850,9 +850,9 @@ static int sys_getsockopt(cpu_t *cpu, const uint64_t args[6]) {
     return finish(cpu, 0);
 }
 
-static int sys_shutdown(cpu_t *cpu, const uint64_t args[6]) { return host_result(cpu, shutdown((int)args[0], (int)args[1])); }
+static int sys_shutdown(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) { return host_result(cpu, shutdown((int)args[0], (int)args[1])); }
 
-static int sys_set_tid_address(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_set_tid_address(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     (void)args;
 #ifdef SYS_gettid
     return finish(cpu, (int64_t)syscall(SYS_gettid));
@@ -861,7 +861,7 @@ static int sys_set_tid_address(cpu_t *cpu, const uint64_t args[6]) {
 #endif
 }
 
-static int sys_exit(cpu_t *cpu, const uint64_t args[6]) {
+static int sys_exit(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     exit((int)args[0]);
     (void)cpu;
     return 0;
@@ -922,28 +922,28 @@ static const struct {
 };
 /* clang-format on */
 
-void syscall_init(cpu_t *cpu, uint64_t image_size) {
-    memset(&cpu->sys, 0, sizeof(cpu->sys));
+void syscall_init(sysstate_t *sys, uint64_t image_size) {
+    memset(sys, 0, sizeof(*sys));
 
     uint64_t base = align_up(DRAM_BASE + image_size, RV_PAGE_SIZE);
     if (base < DRAM_BASE + DRAM_SIZE / 2) {
         base = DRAM_BASE + DRAM_SIZE / 2;
     }
 
-    cpu->sys.brk_base = base;
-    cpu->sys.brk = base;
-    cpu->sys.mmap_top = DRAM_BASE + DRAM_SIZE - 64 * 1024;
-    if (cpu->sys.mmap_top < cpu->sys.brk) {
-        cpu->sys.mmap_top = cpu->sys.brk;
+    sys->brk_base = base;
+    sys->brk = base;
+    sys->mmap_top = DRAM_BASE + DRAM_SIZE - 64 * 1024;
+    if (sys->mmap_top < sys->brk) {
+        sys->mmap_top = sys->brk;
     }
-    cpu->sys.trace = getenv("RVEMU_TRACE_SYSCALLS") != NULL;
+    sys->trace = getenv("RVEMU_TRACE_SYSCALLS") != NULL;
 }
 
-int syscall_dispatch(cpu_t *cpu) {
+int syscall_dispatch(cpu_t *cpu, sysstate_t *sys) {
     uint64_t number = cpu->regs[17];
     uint64_t args[6] = {cpu->regs[10], cpu->regs[11], cpu->regs[12], cpu->regs[13], cpu->regs[14], cpu->regs[15]};
 
-    if (cpu->sys.trace) {
+    if (sys->trace) {
         fprintf(stderr, "rvemu: syscall %lu(%#lx, %#lx, %#lx, %#lx)\n", (unsigned long)number, (unsigned long)args[0], (unsigned long)args[1], (unsigned long)args[2],
                 (unsigned long)args[3]);
     }
@@ -951,7 +951,7 @@ int syscall_dispatch(cpu_t *cpu) {
     switch (number) {
     case RV_SYS_exit:
     case RV_SYS_exit_group:
-        return sys_exit(cpu, args);
+        return sys_exit(cpu, sys, args);
     case RV_SYS_sched_yield:
         return host_result(cpu, sched_yield());
     case RV_SYS_getpid:
@@ -985,8 +985,8 @@ int syscall_dispatch(cpu_t *cpu) {
 
     for (size_t i = 0; i < sizeof(syscall_table) / sizeof(syscall_table[0]); i++) {
         if (syscall_table[i].number == number) {
-            int result = syscall_table[i].function(cpu, args);
-            if (cpu->sys.trace) {
+            int result = syscall_table[i].function(cpu, sys, args);
+            if (sys->trace) {
                 fprintf(stderr, "rvemu: syscall %lu -> %ld\n", (unsigned long)number, (long)(int64_t)cpu->regs[10]);
             }
             return result;

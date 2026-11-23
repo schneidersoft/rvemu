@@ -15,18 +15,10 @@ typedef struct bus_t {
     struct dram_t dram;
 } bus_t;
 
-typedef struct sysstate_t {
-    uint64_t brk_base; // initial program break (brk() lower bound)
-    uint64_t brk;      // current program break (heap top)
-    uint64_t mmap_top; // top-down mmap allocation pointer
-    int trace;         // log emulated syscalls when enabled
-} sysstate_t;
-
 typedef struct cpu_t {
-    uint64_t regs[32];    // 32 64-bit registers (x0-x31)
-    uint64_t pc;          // 64-bit program counter
-    struct bus_t bus;     // cpu_t connected to bus_t
-    struct sysstate_t sys; // per-CPU brk/mmap layout state
+    uint64_t regs[32]; // 32 64-bit registers (x0-x31)
+    uint64_t pc;       // 64-bit program counter
+    struct bus_t bus;  // cpu_t connected to bus_t
 } cpu_t;
 
 uint64_t dram_load(dram_t *dram, uint64_t addr, uint64_t size);

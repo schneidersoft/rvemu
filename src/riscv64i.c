@@ -53,9 +53,13 @@ long read_file(cpu_t *cpu, const char *filename) {
     return fileLen;
 }
 
+/* Guest process memory state (brk/mmap), paired with the cpu instance in main(). */
+static sysstate_t sys_state;
+cpu_t cpu;
+
 int ECALL_cb(cpu_t *cpu, uint32_t inst) {
     (void)inst;
-    return syscall_dispatch(cpu);
+    return syscall_dispatch(cpu, &sys_state);
 }
 
 int EBREAK_cb(cpu_t *cpu, uint32_t inst) {
@@ -78,7 +82,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    cpu_t cpu;
     cpu_init(&cpu);
 
     // Read input file
@@ -87,7 +90,7 @@ int main(int argc, char **argv) {
         DBG("LOAD FILE FAILED");
         return 1;
     }
-    syscall_init(&cpu, (uint64_t)image_size);
+    syscall_init(&sys_state, (uint64_t)image_size);
 
     // cpu loop
     do {
