@@ -6,7 +6,7 @@
 #include "librv64i.h"
 #include "syscall.h"
 
-long read_file(cpu_t *cpu, const char *filename) {
+uint64_t read_file(cpu_t *cpu, const char *filename) {
     FILE *file;
     uint8_t *buffer;
     long fileLen;
@@ -50,16 +50,28 @@ long read_file(cpu_t *cpu, const char *filename) {
     // copy the bin executable to dram
     memcpy(cpu->bus.dram.mem, buffer, fileLen * sizeof(uint8_t));
     free(buffer);
-    return fileLen;
+    return (uint64_t)fileLen;
 }
 
 /* Guest process memory state (brk/mmap), paired with the cpu instance in main(). */
-static sysstate_t sys_state;
+static sysstate_t sys;
 static cpu_t cpu;
+static int guest_exited;    // set by app_exit to signal a graceful guest exit
+static int guest_exit_code; // set by app_exit so the host exits with the guest's status
+
+static int app_exit(cpu_t *cpu, sysstate_t *s, const uint64_t args[6]) {
+    guest_exited = 1;
+    guest_exit_code = (int)(int32_t)args[0];
+    printf("[host] guest exited with code %d\n", guest_exit_code);
+    fflush(stdout);
+    (void)cpu;
+    (void)s;
+    return 1; // non-zero halts the run loop in main
+}
 
 static int ecall_cb(cpu_t *cpu, uint32_t inst) {
     (void)inst;
-    return syscall_dispatch(cpu, &sys_state);
+    return syscall_dispatch(cpu, &sys);
 }
 
 static int ebreak_cb(cpu_t *cpu, uint32_t inst) {
@@ -88,23 +100,30 @@ int main(int argc, char **argv) {
     cpu.invop_cb = invop_cb;
 
     // Read input file
-    long image_size = read_file(&cpu, argv[1]);
+    uint64_t image_size = read_file(&cpu, argv[1]);
     if (image_size < 0) {
         DBG("LOAD FILE FAILED");
         return 1;
     }
-    syscall_init(&sys_state, (uint64_t)image_size);
+    syscall_init(&sys, image_size);
+
+    // Override the guest's termination path: report the exit to the host and
+    // stop gracefully instead of the table default, which kills the whole process.
+    sys.syscalls[RV_SYS_exit] = app_exit;
+    sys.syscalls[RV_SYS_exit_group] = app_exit;
 
     // cpu loop
     do {
         uint32_t inst = cpu_fetch(&cpu);
 
         if (cpu_execute(&cpu, inst)) {
-            DBG("execute error");
+            if (!guest_exited) {
+                DBG("execute error");
+            }
             break;
         }
 
     } while (1);
 
-    return 0;
+    return guest_exit_code;
 }
