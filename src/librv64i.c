@@ -84,7 +84,7 @@ void bus_store(bus_t *bus, uint64_t addr, uint64_t size, uint64_t value) {
 void cpu_init(cpu_t *cpu) {
     memset(cpu, 0, sizeof(*cpu));
     cpu->regs[0] = 0x00;                  // register x0 hardwired to 0
-    cpu->regs[2] = DRAM_BASE + DRAM_SIZE; // Set stack pointer
+    cpu->regs[2] = STACK_TOP; // Set stack pointer (top of guest's reserved stack, see librv64i.h)
     cpu->pc = DRAM_BASE;                  // Set program counter to the base address
 }
 

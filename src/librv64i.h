@@ -7,6 +7,13 @@
 #define DRAM_SIZE 1024 * 1024 * 1
 #define DRAM_BASE 0x00000000
 
+// The guest links its stack at the top of DRAM (see test/riscv.ld), with the
+// start pointer one past the top slot. The initial stack pointer points at
+// that same top address — the value startup loads via `la sp, _stack_top` —
+// so it is always a valid in-DRAM value rather than one past the end of RAM.
+#define STACK_SIZE 16 * 1024
+#define STACK_TOP (DRAM_BASE + DRAM_SIZE - STACK_SIZE)
+
 typedef struct dram_t {
     uint8_t mem[DRAM_SIZE];
 } dram_t;

@@ -58,7 +58,8 @@ SECTIONS
     /* -------------------------------
        Stack (grows downward)
        ------------------------------- */
-    /* Reserve last 16 KB of RAM for stack */
+    /* Reserve last 16 KB of RAM for stack.
+       Keep in sync with STACK_SIZE / STACK_TOP in src/librv64i.h. */
     . = ORIGIN(RAM) + LENGTH(RAM);
     . -= 16K;
     PROVIDE(_stack_top = .);
