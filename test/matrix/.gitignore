@@ -1,0 +1,8 @@
+out/
+riscv64i-*/
+p2-*
+probe-arm
+probe-mips
+probe-mipsel
+probe-x86
+*.err

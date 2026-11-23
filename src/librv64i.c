@@ -2,9 +2,6 @@
 
 #include <string.h>
 
-typedef __int128_t int128_t;
-typedef __uint128_t uint128_t;
-
 static uint64_t dram_load_8(dram_t *dram, uint64_t addr) { return (uint64_t)dram->mem[addr]; }
 static uint64_t dram_load_16(dram_t *dram, uint64_t addr) { return (uint64_t)dram->mem[addr] | (uint64_t)dram->mem[addr + 1] << 8; }
 static uint64_t dram_load_32(dram_t *dram, uint64_t addr) {
@@ -480,16 +477,42 @@ static int exec_MULW(cpu_t *cpu, uint32_t inst) {
     cpu->regs[rd(inst)] = (int64_t)(int32_t)((uint32_t)cpu->regs[rs1(inst)] * (uint32_t)cpu->regs[rs2(inst)]);
     return 0;
 }
+/* High 64 bits of the a*b product of two 64-bit values, without a host
+   dependency on __int128 (which 32-bit hosts do not have). Uses the native
+   128-bit integer when available; otherwise computes the high half from the
+   four 32x32 partial products (all arithmetic is exact modulo 2^64, so the
+   portable path is bit-for-bit identical to the fast path). */
+static uint64_t mul_hi64(uint64_t a, uint64_t b) {
+#if defined(__SIZEOF_INT128__)
+    return (uint64_t)(((unsigned __int128)a * (unsigned __int128)b) >> 64);
+#else
+    uint64_t a0 = (uint32_t)a, a1 = a >> 32;
+    uint64_t b0 = (uint32_t)b, b1 = b >> 32;
+    uint64_t p00 = a0 * b0;
+    uint64_t p01 = a0 * b1;
+    uint64_t p10 = a1 * b0;
+    uint64_t p11 = a1 * b1;
+    uint64_t mid = (p00 >> 32) + (uint32_t)p01 + (uint32_t)p10;
+    return p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32);
+#endif
+}
 static int exec_MULH(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = (((int128_t)(int64_t)cpu->regs[rs1(inst)]) * ((int128_t)(int64_t)cpu->regs[rs2(inst)])) >> 64;
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    uint64_t h = mul_hi64(a, b);
+    if ((int64_t)a < 0) h -= b;
+    if ((int64_t)b < 0) h -= a;
+    cpu->regs[rd(inst)] = h;
     return 0;
 }
 static int exec_MULHU(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = ((uint128_t)cpu->regs[rs1(inst)] * (uint128_t)cpu->regs[rs2(inst)]) >> 64;
+    cpu->regs[rd(inst)] = mul_hi64(cpu->regs[rs1(inst)], cpu->regs[rs2(inst)]);
     return 0;
 }
 static int exec_MULHSU(cpu_t *cpu, uint32_t inst) {
-    cpu->regs[rd(inst)] = ((int128_t)(((int128_t)(int64_t)cpu->regs[rs1(inst)]) * (uint128_t)cpu->regs[rs2(inst)])) >> 64;
+    uint64_t a = cpu->regs[rs1(inst)], b = cpu->regs[rs2(inst)];
+    uint64_t h = mul_hi64(a, b);
+    if ((int64_t)a < 0) h -= b;
+    cpu->regs[rd(inst)] = h;
     return 0;
 }
 static int exec_REM(cpu_t *cpu, uint32_t inst) {
