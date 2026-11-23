@@ -156,13 +156,6 @@ struct rv_stat {
 
 typedef int (*syscall_fn)(cpu_t *cpu, const uint64_t args[6]);
 
-static struct {
-    uint64_t brk_base;
-    uint64_t brk;
-    uint64_t mmap_top;
-    int trace;
-} state;
-
 static int finish(cpu_t *cpu, int64_t value) {
     cpu->regs[10] = (uint64_t)value;
     return 0;
@@ -662,23 +655,23 @@ static int sys_prlimit64(cpu_t *cpu, const uint64_t args[6]) {
 static int sys_brk(cpu_t *cpu, const uint64_t args[6]) {
     uint64_t requested = args[0];
     if (requested == 0) {
-        return finish(cpu, (int64_t)state.brk);
+        return finish(cpu, (int64_t)cpu->sys.brk);
     }
-    if (requested < state.brk_base) {
-        return finish(cpu, (int64_t)state.brk);
+    if (requested < cpu->sys.brk_base) {
+        return finish(cpu, (int64_t)cpu->sys.brk);
     }
-    if (requested > state.mmap_top) {
+    if (requested > cpu->sys.mmap_top) {
         return fail(cpu, ENOMEM);
     }
-    if (requested > state.brk) {
-        uint8_t *start = guest_bytes(cpu, state.brk, requested - state.brk);
+    if (requested > cpu->sys.brk) {
+        uint8_t *start = guest_bytes(cpu, cpu->sys.brk, requested - cpu->sys.brk);
         if (start == NULL) {
             return fail(cpu, ENOMEM);
         }
-        memset(start, 0, requested - state.brk);
+        memset(start, 0, requested - cpu->sys.brk);
     }
-    state.brk = requested;
-    return finish(cpu, (int64_t)state.brk);
+    cpu->sys.brk = requested;
+    return finish(cpu, (int64_t)cpu->sys.brk);
 }
 
 static int sys_mmap(cpu_t *cpu, const uint64_t args[6]) {
@@ -692,17 +685,17 @@ static int sys_mmap(cpu_t *cpu, const uint64_t args[6]) {
     if ((args[3] & RV_MAP_FIXED) != 0) {
         return fail(cpu, ENOSYS);
     }
-    if (length > state.mmap_top - state.brk) {
+    if (length > cpu->sys.mmap_top - cpu->sys.brk) {
         return fail(cpu, ENOMEM);
     }
-    state.mmap_top -= length;
-    uint8_t *memory = guest_bytes(cpu, state.mmap_top, length);
+    cpu->sys.mmap_top -= length;
+    uint8_t *memory = guest_bytes(cpu, cpu->sys.mmap_top, length);
     if (memory == NULL) {
-        state.mmap_top += length;
+        cpu->sys.mmap_top += length;
         return fail(cpu, ENOMEM);
     }
     memset(memory, 0, length);
-    return finish(cpu, (int64_t)state.mmap_top);
+    return finish(cpu, (int64_t)cpu->sys.mmap_top);
 }
 
 static int sys_munmap(cpu_t *cpu, const uint64_t args[6]) {
@@ -929,28 +922,28 @@ static const struct {
 };
 /* clang-format on */
 
-void syscall_init(uint64_t image_size) {
-    memset(&state, 0, sizeof(state));
+void syscall_init(cpu_t *cpu, uint64_t image_size) {
+    memset(&cpu->sys, 0, sizeof(cpu->sys));
 
     uint64_t base = align_up(DRAM_BASE + image_size, RV_PAGE_SIZE);
     if (base < DRAM_BASE + DRAM_SIZE / 2) {
         base = DRAM_BASE + DRAM_SIZE / 2;
     }
 
-    state.brk_base = base;
-    state.brk = base;
-    state.mmap_top = DRAM_BASE + DRAM_SIZE - 64 * 1024;
-    if (state.mmap_top < state.brk) {
-        state.mmap_top = state.brk;
+    cpu->sys.brk_base = base;
+    cpu->sys.brk = base;
+    cpu->sys.mmap_top = DRAM_BASE + DRAM_SIZE - 64 * 1024;
+    if (cpu->sys.mmap_top < cpu->sys.brk) {
+        cpu->sys.mmap_top = cpu->sys.brk;
     }
-    state.trace = getenv("RVEMU_TRACE_SYSCALLS") != NULL;
+    cpu->sys.trace = getenv("RVEMU_TRACE_SYSCALLS") != NULL;
 }
 
 int syscall_dispatch(cpu_t *cpu) {
     uint64_t number = cpu->regs[17];
     uint64_t args[6] = {cpu->regs[10], cpu->regs[11], cpu->regs[12], cpu->regs[13], cpu->regs[14], cpu->regs[15]};
 
-    if (state.trace) {
+    if (cpu->sys.trace) {
         fprintf(stderr, "rvemu: syscall %lu(%#lx, %#lx, %#lx, %#lx)\n", (unsigned long)number, (unsigned long)args[0], (unsigned long)args[1], (unsigned long)args[2],
                 (unsigned long)args[3]);
     }
@@ -993,7 +986,7 @@ int syscall_dispatch(cpu_t *cpu) {
     for (size_t i = 0; i < sizeof(syscall_table) / sizeof(syscall_table[0]); i++) {
         if (syscall_table[i].number == number) {
             int result = syscall_table[i].function(cpu, args);
-            if (state.trace) {
+            if (cpu->sys.trace) {
                 fprintf(stderr, "rvemu: syscall %lu -> %ld\n", (unsigned long)number, (long)(int64_t)cpu->regs[10]);
             }
             return result;

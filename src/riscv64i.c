@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
         DBG("LOAD FILE FAILED");
         return 1;
     }
-    syscall_init((uint64_t)image_size);
+    syscall_init(&cpu, (uint64_t)image_size);
 
     // cpu loop
     do {
