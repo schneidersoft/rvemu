@@ -386,9 +386,9 @@ static int exec_FENCE(cpu_t *cpu, uint32_t inst) {
 }
 static int exec_ECALL_EBREAK(cpu_t *cpu, uint32_t inst) {
     if (imm_I(inst) == 0x0)
-        return ECALL_cb(cpu, inst);
+        return cpu->ecall_cb ? cpu->ecall_cb(cpu, inst) : -1;
     if (imm_I(inst) == 0x1)
-        return EBREAK_cb(cpu, inst);
+        return cpu->ebreak_cb ? cpu->ebreak_cb(cpu, inst) : -1;
     return -1;
 }
 static int exec_ADDIW(cpu_t *cpu, uint32_t inst) {
@@ -530,7 +530,8 @@ static int exec_REMUW(cpu_t *cpu, uint32_t inst) {
     return 0;
 }
 int exec_invalid(cpu_t *cpu, uint32_t inst) {
-    INVOP_cb(cpu, inst);
+    if (cpu->invop_cb)
+        cpu->invop_cb(cpu, inst);
     return 1;
 }
 

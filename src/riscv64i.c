@@ -55,20 +55,20 @@ long read_file(cpu_t *cpu, const char *filename) {
 
 /* Guest process memory state (brk/mmap), paired with the cpu instance in main(). */
 static sysstate_t sys_state;
-cpu_t cpu;
+static cpu_t cpu;
 
-int ECALL_cb(cpu_t *cpu, uint32_t inst) {
+static int ecall_cb(cpu_t *cpu, uint32_t inst) {
     (void)inst;
     return syscall_dispatch(cpu, &sys_state);
 }
 
-int EBREAK_cb(cpu_t *cpu, uint32_t inst) {
+static int ebreak_cb(cpu_t *cpu, uint32_t inst) {
     (void)inst;
     exit((int)(int32_t)cpu->regs[10]);
     return 0;
 }
 
-int INVOP_cb(cpu_t *cpu, uint32_t inst) {
+static int invop_cb(cpu_t *cpu, uint32_t inst) {
     int opcode = inst & 0x7f;         // opcode in bits 6..0
     int funct3 = (inst >> 12) & 0x7;  // funct3 in bits 14..12
     int funct7 = (inst >> 25) & 0x7f; // funct7 in bits 31..25
@@ -83,6 +83,9 @@ int main(int argc, char **argv) {
     }
 
     cpu_init(&cpu);
+    cpu.ecall_cb = ecall_cb;
+    cpu.ebreak_cb = ebreak_cb;
+    cpu.invop_cb = invop_cb;
 
     // Read input file
     long image_size = read_file(&cpu, argv[1]);

@@ -23,74 +23,6 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Linux RISC-V (asm-generic) syscall numbers. */
-enum {
-    RV_SYS_getcwd = 17,
-    RV_SYS_dup = 23,
-    RV_SYS_dup3 = 24,
-    RV_SYS_fcntl = 25,
-    RV_SYS_ioctl = 29,
-    RV_SYS_mkdirat = 34,
-    RV_SYS_unlinkat = 35,
-    RV_SYS_symlinkat = 36,
-    RV_SYS_linkat = 37,
-    RV_SYS_renameat = 38,
-    RV_SYS_faccessat = 48,
-    RV_SYS_chdir = 49,
-    RV_SYS_openat = 56,
-    RV_SYS_close = 57,
-    RV_SYS_pipe2 = 59,
-    RV_SYS_getdents64 = 61,
-    RV_SYS_lseek = 62,
-    RV_SYS_read = 63,
-    RV_SYS_write = 64,
-    RV_SYS_readv = 65,
-    RV_SYS_writev = 66,
-    RV_SYS_pread64 = 67,
-    RV_SYS_pwrite64 = 68,
-    RV_SYS_newfstatat = 79,
-    RV_SYS_fstat = 80,
-    RV_SYS_exit = 93,
-    RV_SYS_exit_group = 94,
-    RV_SYS_set_tid_address = 96,
-    RV_SYS_futex = 98,
-    RV_SYS_set_robust_list = 99,
-    RV_SYS_nanosleep = 101,
-    RV_SYS_clock_gettime = 113,
-    RV_SYS_clock_getres = 114,
-    RV_SYS_sched_yield = 124,
-    RV_SYS_uname = 160,
-    RV_SYS_rt_sigaction = 134,
-    RV_SYS_rt_sigprocmask = 135,
-    RV_SYS_getrlimit = 163,
-    RV_SYS_setrlimit = 164,
-    RV_SYS_gettimeofday = 169,
-    RV_SYS_getpid = 172,
-    RV_SYS_getppid = 173,
-    RV_SYS_getuid = 174,
-    RV_SYS_geteuid = 175,
-    RV_SYS_getgid = 176,
-    RV_SYS_getegid = 177,
-    RV_SYS_gettid = 178,
-    RV_SYS_socket = 198,
-    RV_SYS_connect = 203,
-    RV_SYS_sendto = 206,
-    RV_SYS_recvfrom = 207,
-    RV_SYS_setsockopt = 208,
-    RV_SYS_getsockopt = 209,
-    RV_SYS_shutdown = 210,
-    RV_SYS_brk = 214,
-    RV_SYS_munmap = 215,
-    RV_SYS_clone = 220,
-    RV_SYS_execve = 221,
-    RV_SYS_mmap = 222,
-    RV_SYS_mprotect = 226,
-    RV_SYS_madvise = 233,
-    RV_SYS_prlimit64 = 261,
-    RV_SYS_getrandom = 278,
-    RV_SYS_membarrier = 283,
-};
-
 enum {
     RV_MAP_PRIVATE = 0x02,
     RV_MAP_FIXED = 0x10,
@@ -153,8 +85,6 @@ struct rv_stat {
     uint32_t __unused4;
     uint32_t __unused5;
 };
-
-typedef int (*syscall_fn)(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]);
 
 static int finish(cpu_t *cpu, int64_t value) {
     cpu->regs[10] = (uint64_t)value;
@@ -867,63 +797,118 @@ static int sys_exit(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     return 0;
 }
 
-/* clang-format off */
-static const struct {
-    uint64_t number;
-    syscall_fn function;
-} syscall_table[] = {
-    {RV_SYS_getcwd, sys_getcwd},
-    {RV_SYS_dup, sys_dup},
-    {RV_SYS_dup3, sys_dup3},
-    {RV_SYS_fcntl, sys_fcntl},
-    {RV_SYS_ioctl, sys_ioctl},
-    {RV_SYS_mkdirat, sys_mkdirat},
-    {RV_SYS_unlinkat, sys_unlinkat},
-    {RV_SYS_symlinkat, sys_symlinkat},
-    {RV_SYS_linkat, sys_linkat},
-    {RV_SYS_renameat, sys_renameat},
-    {RV_SYS_faccessat, sys_faccessat},
-    {RV_SYS_chdir, sys_chdir},
-    {RV_SYS_openat, sys_openat},
-    {RV_SYS_close, sys_close},
-    {RV_SYS_pipe2, sys_pipe2},
-    {RV_SYS_getdents64, sys_getdents64},
-    {RV_SYS_lseek, sys_lseek},
-    {RV_SYS_read, sys_read},
-    {RV_SYS_write, sys_write},
-    {RV_SYS_readv, sys_readv},
-    {RV_SYS_writev, sys_writev},
-    {RV_SYS_pread64, sys_pread64},
-    {RV_SYS_pwrite64, sys_pwrite64},
-    {RV_SYS_newfstatat, sys_newfstatat},
-    {RV_SYS_fstat, sys_fstat},
-    {RV_SYS_set_tid_address, sys_set_tid_address},
-    {RV_SYS_nanosleep, sys_nanosleep},
-    {RV_SYS_clock_gettime, sys_clock_gettime},
-    {RV_SYS_clock_getres, sys_clock_getres},
-    {RV_SYS_getrlimit, sys_getrlimit},
-    {RV_SYS_setrlimit, sys_setrlimit},
-    {RV_SYS_gettimeofday, sys_gettimeofday},
-    {RV_SYS_uname, sys_uname},
-    {RV_SYS_brk, sys_brk},
-    {RV_SYS_munmap, sys_munmap},
-    {RV_SYS_mmap, sys_mmap},
-    {RV_SYS_mprotect, sys_mprotect},
-    {RV_SYS_madvise, sys_madvise},
-    {RV_SYS_prlimit64, sys_prlimit64},
-    {RV_SYS_getrandom, sys_getrandom},
-    {RV_SYS_socket, sys_socket},
-    {RV_SYS_connect, sys_connect},
-    {RV_SYS_sendto, sys_sendto},
-    {RV_SYS_recvfrom, sys_recvfrom},
-    {RV_SYS_setsockopt, sys_setsockopt},
-    {RV_SYS_getsockopt, sys_getsockopt},
-    {RV_SYS_shutdown, sys_shutdown},
+static int sys_noop(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, 0);
+}
+
+static int sys_sched_yield(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return host_result(cpu, sched_yield());
+}
+
+static int sys_getpid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)getpid());
+}
+
+static int sys_getppid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)getppid());
+}
+
+static int sys_getuid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)getuid());
+}
+
+static int sys_geteuid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)geteuid());
+}
+
+static int sys_getgid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)getgid());
+}
+
+static int sys_getegid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+    return finish(cpu, (int64_t)getegid());
+}
+
+static int sys_gettid(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
+#ifdef SYS_gettid
+    return finish(cpu, (int64_t)syscall(SYS_gettid));
+#else
+    return finish(cpu, (int64_t)getpid());
+#endif
+}
+
+/* Default dispatch table, indexed by syscall number. Entries are NULL
+ * by default (ENOSYS); syscall_init copies this into sys->syscalls and the
+ * application may then override individual numbers there. The numbers 98
+ * (futex), 220 (clone) and 221 (execve) have no entry on purpose. */
+static const syscall_fn default_syscalls[RV_SYS_MAX] = {
+    [RV_SYS_getcwd] = sys_getcwd,
+    [RV_SYS_dup] = sys_dup,
+    [RV_SYS_dup3] = sys_dup3,
+    [RV_SYS_fcntl] = sys_fcntl,
+    [RV_SYS_ioctl] = sys_ioctl,
+    [RV_SYS_mkdirat] = sys_mkdirat,
+    [RV_SYS_unlinkat] = sys_unlinkat,
+    [RV_SYS_symlinkat] = sys_symlinkat,
+    [RV_SYS_linkat] = sys_linkat,
+    [RV_SYS_renameat] = sys_renameat,
+    [RV_SYS_faccessat] = sys_faccessat,
+    [RV_SYS_chdir] = sys_chdir,
+    [RV_SYS_openat] = sys_openat,
+    [RV_SYS_close] = sys_close,
+    [RV_SYS_pipe2] = sys_pipe2,
+    [RV_SYS_getdents64] = sys_getdents64,
+    [RV_SYS_lseek] = sys_lseek,
+    [RV_SYS_read] = sys_read,
+    [RV_SYS_write] = sys_write,
+    [RV_SYS_readv] = sys_readv,
+    [RV_SYS_writev] = sys_writev,
+    [RV_SYS_pread64] = sys_pread64,
+    [RV_SYS_pwrite64] = sys_pwrite64,
+    [RV_SYS_newfstatat] = sys_newfstatat,
+    [RV_SYS_fstat] = sys_fstat,
+    [RV_SYS_exit] = sys_exit,
+    [RV_SYS_exit_group] = sys_exit,
+    [RV_SYS_set_tid_address] = sys_set_tid_address,
+    [RV_SYS_nanosleep] = sys_nanosleep,
+    [RV_SYS_clock_gettime] = sys_clock_gettime,
+    [RV_SYS_clock_getres] = sys_clock_getres,
+    [RV_SYS_sched_yield] = sys_sched_yield,
+    [RV_SYS_rt_sigaction] = sys_noop,
+    [RV_SYS_rt_sigprocmask] = sys_noop,
+    [RV_SYS_set_robust_list] = sys_noop,
+    [RV_SYS_uname] = sys_uname,
+    [RV_SYS_getrlimit] = sys_getrlimit,
+    [RV_SYS_setrlimit] = sys_setrlimit,
+    [RV_SYS_gettimeofday] = sys_gettimeofday,
+    [RV_SYS_getpid] = sys_getpid,
+    [RV_SYS_getppid] = sys_getppid,
+    [RV_SYS_getuid] = sys_getuid,
+    [RV_SYS_geteuid] = sys_geteuid,
+    [RV_SYS_getgid] = sys_getgid,
+    [RV_SYS_getegid] = sys_getegid,
+    [RV_SYS_gettid] = sys_gettid,
+    [RV_SYS_socket] = sys_socket,
+    [RV_SYS_connect] = sys_connect,
+    [RV_SYS_sendto] = sys_sendto,
+    [RV_SYS_recvfrom] = sys_recvfrom,
+    [RV_SYS_setsockopt] = sys_setsockopt,
+    [RV_SYS_getsockopt] = sys_getsockopt,
+    [RV_SYS_shutdown] = sys_shutdown,
+    [RV_SYS_brk] = sys_brk,
+    [RV_SYS_munmap] = sys_munmap,
+    [RV_SYS_mmap] = sys_mmap,
+    [RV_SYS_mprotect] = sys_mprotect,
+    [RV_SYS_madvise] = sys_madvise,
+    [RV_SYS_prlimit64] = sys_prlimit64,
+    [RV_SYS_getrandom] = sys_getrandom,
+    [RV_SYS_membarrier] = sys_noop,
 };
 /* clang-format on */
 
 void syscall_init(sysstate_t *sys, uint64_t image_size) {
     memset(sys, 0, sizeof(*sys));
+    memcpy(sys->syscalls, default_syscalls, sizeof(default_syscalls));
 
     uint64_t base = align_up(DRAM_BASE + image_size, RV_PAGE_SIZE);
     if (base < DRAM_BASE + DRAM_SIZE / 2) {
@@ -948,50 +933,17 @@ int syscall_dispatch(cpu_t *cpu, sysstate_t *sys) {
                 (unsigned long)args[3]);
     }
 
-    switch (number) {
-    case RV_SYS_exit:
-    case RV_SYS_exit_group:
-        return sys_exit(cpu, sys, args);
-    case RV_SYS_sched_yield:
-        return host_result(cpu, sched_yield());
-    case RV_SYS_getpid:
-        return finish(cpu, getpid());
-    case RV_SYS_getppid:
-        return finish(cpu, getppid());
-    case RV_SYS_getuid:
-        return finish(cpu, getuid());
-    case RV_SYS_geteuid:
-        return finish(cpu, geteuid());
-    case RV_SYS_getgid:
-        return finish(cpu, getgid());
-    case RV_SYS_getegid:
-        return finish(cpu, getegid());
-    case RV_SYS_gettid:
-#ifdef SYS_gettid
-        return finish(cpu, (int64_t)syscall(SYS_gettid));
-#else
-        return finish(cpu, getpid());
-#endif
-    case RV_SYS_rt_sigaction:
-    case RV_SYS_rt_sigprocmask:
-    case RV_SYS_set_robust_list:
-    case RV_SYS_membarrier:
-        return finish(cpu, 0);
-    case RV_SYS_futex:
-    case RV_SYS_clone:
-    case RV_SYS_execve:
+    /* Out-of-range numbers and unimplemented entries both yield ENOSYS. */
+    if (number >= RV_SYS_MAX) {
         return fail(cpu, ENOSYS);
     }
-
-    for (size_t i = 0; i < sizeof(syscall_table) / sizeof(syscall_table[0]); i++) {
-        if (syscall_table[i].number == number) {
-            int result = syscall_table[i].function(cpu, sys, args);
-            if (sys->trace) {
-                fprintf(stderr, "rvemu: syscall %lu -> %ld\n", (unsigned long)number, (long)(int64_t)cpu->regs[10]);
-            }
-            return result;
-        }
+    syscall_fn fn = sys->syscalls[number];
+    if (fn == NULL) {
+        return fail(cpu, ENOSYS);
     }
-
-    return fail(cpu, ENOSYS);
+    int result = fn(cpu, sys, args);
+    if (sys->trace) {
+        fprintf(stderr, "rvemu: syscall %lu -> %ld\n", (unsigned long)number, (long)(int64_t)cpu->regs[10]);
+    }
+    return result;
 }
