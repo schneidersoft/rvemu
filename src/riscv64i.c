@@ -56,8 +56,8 @@ uint64_t read_file(cpu_t *cpu, const char *filename) {
 /* Guest process memory state (brk/mmap), paired with the cpu instance in main(). */
 static sysstate_t sys;
 static cpu_t cpu;
-static int guest_exited;    // set by app_exit to signal a graceful guest exit
-static int guest_exit_code; // set by app_exit so the host exits with the guest's status
+static int guest_exited = 0;    // set by app_exit to signal a graceful guest exit
+static int guest_exit_code = 0; // set by app_exit so the host exits with the guest's status
 
 static int app_exit(cpu_t *cpu, sysstate_t *s, const uint64_t args[6]) {
     guest_exited = 1;
