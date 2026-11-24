@@ -15,6 +15,7 @@
 #include <sys/random.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -1204,13 +1205,277 @@ static int sys_getrandom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     return host_result(cpu, result);
 }
 
+/* Guest socket ABI is Linux-generic (asm-generic / RISC-V), fixed by the
+ * guest headers.  rvemu forwards socket syscalls to the host, but when the
+ * emulator itself is cross-compiled for a target ABI and run under qemu-user,
+ * qemu-user translates those host syscalls according to the target ABI.  MIPS
+ * numbers SOCK_STREAM/SOCK_DGRAM and SOL_SOCKET/optname values differently,
+ * and BE targets read sockaddr fields in host byte order; forwarding the
+ * guest's Linux-generic values verbatim therefore mis-translates on those
+ * arches.  Map guest -> host here (mirrors guest_errno/guest_open_flags). */
+enum {
+    GUEST_AF_INET      = 2,
+    GUEST_AF_INET6     = 10,
+    GUEST_SOCK_STREAM  = 1,
+    GUEST_SOCK_DGRAM   = 2,
+    GUEST_SOCK_RAW     = 3,
+    GUEST_SOCK_RDM     = 4,
+    GUEST_SOCK_SEQPACKET = 5,
+    GUEST_SOCK_DCCP    = 6,
+    GUEST_SOCK_PACKET  = 10,
+    GUEST_SOCK_NONBLOCK = 00004000,
+    GUEST_SOCK_CLOEXEC  = 02000000,
+    GUEST_SOCK_TYPE_MASK = 0xf,
+};
+
+static int guest_sock_domain_to_host(int domain) {
+    switch (domain) {
+    case GUEST_AF_INET:
+        return AF_INET;
+#ifdef AF_INET6
+    case GUEST_AF_INET6:
+        return AF_INET6;
+#endif
+#ifdef AF_UNIX
+    case 1:
+        return AF_UNIX;
+#endif
+    default:
+        return domain;
+    }
+}
+
+static int guest_sock_type_to_host(int type) {
+    int flags = 0;
+    int base = type & ~GUEST_SOCK_NONBLOCK & ~GUEST_SOCK_CLOEXEC;
+    int host_type;
+
+    if (type & GUEST_SOCK_NONBLOCK) {
+#ifdef SOCK_NONBLOCK
+        flags |= SOCK_NONBLOCK;
+#endif
+    }
+    if (type & GUEST_SOCK_CLOEXEC) {
+#ifdef SOCK_CLOEXEC
+        flags |= SOCK_CLOEXEC;
+#endif
+    }
+
+    switch (base) {
+    case GUEST_SOCK_STREAM:
+        host_type = SOCK_STREAM;
+        break;
+    case GUEST_SOCK_DGRAM:
+        host_type = SOCK_DGRAM;
+        break;
+#ifdef SOCK_RAW
+    case GUEST_SOCK_RAW:
+        host_type = SOCK_RAW;
+        break;
+#endif
+#ifdef SOCK_RDM
+    case GUEST_SOCK_RDM:
+        host_type = SOCK_RDM;
+        break;
+#endif
+#ifdef SOCK_SEQPACKET
+    case GUEST_SOCK_SEQPACKET:
+        host_type = SOCK_SEQPACKET;
+        break;
+#endif
+#ifdef SOCK_DCCP
+    case GUEST_SOCK_DCCP:
+        host_type = SOCK_DCCP;
+        break;
+#endif
+#ifdef SOCK_PACKET
+    case GUEST_SOCK_PACKET:
+        host_type = SOCK_PACKET;
+        break;
+#endif
+    default:
+        host_type = base;
+        break;
+    }
+    return host_type | flags;
+}
+
+enum {
+    GUEST_SOL_SOCKET = 1,
+};
+
+static int guest_sockopt_level_to_host(int level) {
+    if (level == GUEST_SOL_SOCKET)
+        return SOL_SOCKET;
+#ifdef IPPROTO_IP
+    if (level == 0)
+        return IPPROTO_IP;
+#endif
+#ifdef IPPROTO_TCP
+    if (level == 6)
+        return IPPROTO_TCP;
+#endif
+#ifdef IPPROTO_UDP
+    if (level == 17)
+        return IPPROTO_UDP;
+#endif
+#ifdef IPPROTO_IPV6
+    if (level == 41)
+        return IPPROTO_IPV6;
+#endif
+    return level;
+}
+
+static int guest_sockopt_optname_to_host(int level, int optname) {
+    if (level != GUEST_SOL_SOCKET)
+        return optname;
+    switch (optname) {
+#ifdef SO_DEBUG
+    case 1: return SO_DEBUG;
+#endif
+#ifdef SO_REUSEADDR
+    case 2: return SO_REUSEADDR;
+#endif
+#ifdef SO_TYPE
+    case 3: return SO_TYPE;
+#endif
+#ifdef SO_ERROR
+    case 4: return SO_ERROR;
+#endif
+#ifdef SO_DONTROUTE
+    case 5: return SO_DONTROUTE;
+#endif
+#ifdef SO_BROADCAST
+    case 6: return SO_BROADCAST;
+#endif
+#ifdef SO_SNDBUF
+    case 7: return SO_SNDBUF;
+#endif
+#ifdef SO_RCVBUF
+    case 8: return SO_RCVBUF;
+#endif
+#ifdef SO_KEEPALIVE
+    case 9: return SO_KEEPALIVE;
+#endif
+#ifdef SO_OOBINLINE
+    case 10: return SO_OOBINLINE;
+#endif
+#ifdef SO_LINGER
+    case 13: return SO_LINGER;
+#endif
+#ifdef SO_REUSEPORT
+    case 15: return SO_REUSEPORT;
+#endif
+#ifdef SO_RCVTIMEO
+    case 20: return SO_RCVTIMEO;
+#endif
+#ifdef SO_SNDTIMEO
+    case 21: return SO_SNDTIMEO;
+#endif
+#ifdef SO_ACCEPTCONN
+    case 30: return SO_ACCEPTCONN;
+#endif
+    default:
+        return optname;
+    }
+}
+
+/* Copy a guest sockaddr into a host sockaddr buffer, fixing sa_family to the
+ * host representation.  sin_port/sin_addr are network byte order (byte-identical).
+ * Returns host sockaddr length, or -1 if the guest address is invalid. */
+static int guest_sockaddr_to_host(const uint8_t *guest, uint64_t guest_len,
+                                  uint8_t *host, uint64_t host_cap) {
+    uint16_t family;
+    if (guest_len < 2 || host_cap < 2)
+        return -1;
+    family = (uint16_t)guest[0] | ((uint16_t)guest[1] << 8); /* guest is LE */
+    if (guest_len > host_cap)
+        guest_len = host_cap;
+    memcpy(host, guest, (size_t)guest_len);
+
+    /* Write sa_family in host byte order. */
+    {
+        uint16_t hf = 0;
+        if (family == GUEST_AF_INET)
+            hf = (uint16_t)AF_INET;
+#ifdef AF_INET6
+        else if (family == GUEST_AF_INET6)
+            hf = (uint16_t)AF_INET6;
+#endif
+#ifdef AF_UNIX
+        else if (family == 1)
+            hf = (uint16_t)AF_UNIX;
+#endif
+        else
+            hf = family;
+        memcpy(host, &hf, sizeof(hf));
+    }
+
+#ifdef AF_INET6
+    if (family == GUEST_AF_INET6 && guest_len >= (uint64_t)sizeof(struct sockaddr_in6)) {
+        /* sin6_flowinfo and sin6_scope_id are uint32_t host-order fields. */
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)host;
+        uint32_t flowinfo = (uint32_t)guest[4] | ((uint32_t)guest[5] << 8) |
+                            ((uint32_t)guest[6] << 16) | ((uint32_t)guest[7] << 24);
+        uint32_t scope_id = (uint32_t)guest[24] | ((uint32_t)guest[25] << 8) |
+                            ((uint32_t)guest[26] << 16) | ((uint32_t)guest[27] << 24);
+        in6->sin6_flowinfo = flowinfo;
+        in6->sin6_scope_id = scope_id;
+    }
+#endif
+    return (int)guest_len;
+}
+
+/* Convert a host sockaddr in-place buffer to guest/Linux-generic layout. */
+static void host_sockaddr_to_guest(uint8_t *addr, uint64_t len) {
+    uint16_t hf;
+    uint16_t gf;
+    if (len < 2)
+        return;
+    memcpy(&hf, addr, sizeof(hf));
+    if (hf == AF_INET)
+        gf = GUEST_AF_INET;
+#ifdef AF_INET6
+    else if (hf == AF_INET6)
+        gf = GUEST_AF_INET6;
+#endif
+#ifdef AF_UNIX
+    else if (hf == AF_UNIX)
+        gf = 1;
+#endif
+    else
+        gf = hf;
+    addr[0] = (uint8_t)(gf & 0xff);
+    addr[1] = (uint8_t)((gf >> 8) & 0xff);
+
+#ifdef AF_INET6
+    if (gf == GUEST_AF_INET6 && len >= (uint64_t)sizeof(struct sockaddr_in6)) {
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)addr;
+        uint32_t flowinfo = in6->sin6_flowinfo;
+        uint32_t scope_id = in6->sin6_scope_id;
+        /* write guest LE uint32 */
+        addr[4] = (uint8_t)(flowinfo & 0xff);
+        addr[5] = (uint8_t)((flowinfo >> 8) & 0xff);
+        addr[6] = (uint8_t)((flowinfo >> 16) & 0xff);
+        addr[7] = (uint8_t)((flowinfo >> 24) & 0xff);
+        addr[24] = (uint8_t)(scope_id & 0xff);
+        addr[25] = (uint8_t)((scope_id >> 8) & 0xff);
+        addr[26] = (uint8_t)((scope_id >> 16) & 0xff);
+        addr[27] = (uint8_t)((scope_id >> 24) & 0xff);
+    }
+#endif
+}
+
 static int sys_socket(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
-    return host_result(cpu, socket((int)args[0], (int)args[1], (int)args[2]));
+    return host_result(cpu, socket(guest_sock_domain_to_host((int)args[0]),
+                                   guest_sock_type_to_host((int)args[1]),
+                                   (int)args[2]));
 }
 
 static int sys_connect(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t address[RV_MAX_SOCKADDR];
     uint64_t length = args[2] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[2];
+    int host_len;
 
     if (args[1] == 0) {
         return fail(cpu, EFAULT);
@@ -1218,26 +1483,36 @@ static int sys_connect(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (guest_read(cpu, args[1], address, length) < 0) {
         return fail(cpu, EFAULT);
     }
-    return host_result(cpu, connect((int)args[0], (const struct sockaddr *)address, (socklen_t)length));
+    host_len = guest_sockaddr_to_host(address, length, address, sizeof(address));
+    if (host_len < 0) {
+        return fail(cpu, EINVAL);
+    }
+    return host_result(cpu, connect((int)args[0], (const struct sockaddr *)address, (socklen_t)host_len));
 }
 
 static int sys_sendto(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t *buffer = guest_bytes(cpu, args[1], args[2]);
     uint8_t address[RV_MAX_SOCKADDR];
     const struct sockaddr *destination = NULL;
-    uint64_t length = 0;
+    socklen_t length = 0;
 
     if (buffer == NULL) {
         return fail(cpu, EFAULT);
     }
     if (args[4] != 0) {
-        length = args[5] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[5];
-        if (guest_read(cpu, args[4], address, length) < 0) {
+        uint64_t glen = args[5] > RV_MAX_SOCKADDR ? RV_MAX_SOCKADDR : args[5];
+        int host_len;
+        if (guest_read(cpu, args[4], address, glen) < 0) {
             return fail(cpu, EFAULT);
         }
+        host_len = guest_sockaddr_to_host(address, glen, address, sizeof(address));
+        if (host_len < 0) {
+            return fail(cpu, EINVAL);
+        }
         destination = (const struct sockaddr *)address;
+        length = (socklen_t)host_len;
     }
-    return host_result(cpu, sendto((int)args[0], buffer, (size_t)args[2], (int)args[3], destination, (socklen_t)length));
+    return host_result(cpu, sendto((int)args[0], buffer, (size_t)args[2], (int)args[3], destination, length));
 }
 
 static int sys_recvfrom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
@@ -1252,6 +1527,7 @@ static int sys_recvfrom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     address_length = args[5] > RV_MAX_SOCKADDR ? (socklen_t)RV_MAX_SOCKADDR : (socklen_t)args[5];
     result = (long)recvfrom((int)args[0], buffer, (size_t)args[2], (int)args[3], (struct sockaddr *)address, &address_length);
     if (result >= 0 && args[4] != 0 && address_length > 0) {
+        host_sockaddr_to_guest(address, (uint64_t)address_length);
         if (guest_write(cpu, args[4], address, address_length) < 0) {
             return fail(cpu, EFAULT);
         }
@@ -1262,19 +1538,23 @@ static int sys_recvfrom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
 static int sys_setsockopt(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t value[RV_MAX_SOCKET_OPTION];
     uint64_t length = args[4] > RV_MAX_SOCKET_OPTION ? RV_MAX_SOCKET_OPTION : args[4];
+    int level = guest_sockopt_level_to_host((int)args[1]);
+    int optname = guest_sockopt_optname_to_host((int)args[1], (int)args[2]);
 
     if (length > 0) {
         if (args[3] == 0 || guest_read(cpu, args[3], value, length) < 0) {
             return fail(cpu, EFAULT);
         }
     }
-    return host_result(cpu, setsockopt((int)args[0], (int)args[1], (int)args[2], value, (socklen_t)length));
+    return host_result(cpu, setsockopt((int)args[0], level, optname, value, (socklen_t)length));
 }
 
 static int sys_getsockopt(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     uint8_t value[RV_MAX_SOCKET_OPTION];
     uint32_t guest_length = 0;
     socklen_t length;
+    int level = guest_sockopt_level_to_host((int)args[1]);
+    int optname = guest_sockopt_optname_to_host((int)args[1], (int)args[2]);
 
     if (args[3] == 0 || args[4] == 0) {
         return fail(cpu, EFAULT);
@@ -1286,7 +1566,7 @@ static int sys_getsockopt(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
     if (length > RV_MAX_SOCKET_OPTION) {
         length = RV_MAX_SOCKET_OPTION;
     }
-    if (getsockopt((int)args[0], (int)args[1], (int)args[2], value, &length) < 0) {
+    if (getsockopt((int)args[0], level, optname, value, &length) < 0) {
         return fail(cpu, errno);
     }
     if (length > 0 && guest_write(cpu, args[3], value, length) < 0) {

@@ -32,13 +32,13 @@ host's ABI (endianness, errno numbering, open-flag layout, 128-bit arithmetic,
 | x86_64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
 | aarch64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
 | arm | PASS | PASS | PASS (trapped, rc=1) | PASS |
-| mipsel | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| mipsel | PASS | PASS | PASS (trapped, rc=1) | PASS |
 | powerpc64le | PASS | PASS | PASS (trapped, rc=1) | PASS |
-| powerpc64 | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
-| powerpc | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
-| s390x | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| powerpc64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| powerpc | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| s390x | PASS | PASS | PASS (trapped, rc=1) | PASS |
 | riscv64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
-| mips | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| mips | PASS | PASS | PASS (trapped, rc=1) | PASS |
 
 **riscv32 is excluded** — see "Scope decision" below.
 
@@ -49,17 +49,12 @@ toward the pass/fail verdict; it is listed for completeness.
 > **Note on `net`:** the original design fetched `google.com:80`, so pass/fail
 > depended on external egress. It is now hermetic: `net.bin` dials a throwaway
 > local HTTP server on `127.0.0.1:8931` (`test/net/net.py`) and checks an
-> `HTTP 200` response with a known marker. Little-endian non-MIPS hosts
-> (x86_64, aarch64, arm, ppc64le, riscv64) pass. MIPS targets (mips, mipsel)
-> and big-endian hosts (powerpc64, powerpc, s390x) fail under nested qemu-user:
-> qemu-user translates the target ABI's socket constants/`sockaddr` to the host
-> ABI, but the guest here is fixed LE RISC-V and emits host-ABI socket bytes.
-> qemu-user 8.2.2 mangles them on those targets (e.g. MIPS swaps
-> `SOCK_STREAM`/`SOCK_DGRAM`; BE targets read a byte-swapped `sa_family`),
-> yielding `EAFNOSUPPORT`/`ENOPROTOOPT` from inside qemu. This is a limitation
-> of nesting qemu-user under rvemu's syscall proxy, not an rvemu host-ABI
-> defect: the mandatory gates pass on every arch, and the net failure mode is
-> confined to qemu's own translation layer.
+> `HTTP 200` response with a known marker. Net remains best-effort (not a
+> mandatory gate), but now passes on every runnable arch. The earlier MIPS/BE
+> failures under nested qemu-user were caused by forwarding Linux-generic guest
+> socket values unchanged through rvemu while qemu-user translated them as
+> target-ABI syscalls; fixed by guest→host socket ABI translation in
+> `src/syscall.c` (see Class 5 below).
 
 ## Defect classes found and fixed
 
@@ -104,6 +99,25 @@ through unchanged.
 MIPS is the only divergent ABI, every other arch matches the guest table.
 *Result:* mips/mipsel pass both gates.
 
+### Class 5 — socket ABI translation
+*Symptom:* net.bin passed on LE-non-MIPS arches but failed on MIPS (mips/mipsel)
+and BE (powerpc64, powerpc, s390x) under nested qemu-user.
+*Cause:* rvemu forwarded guest/Linux-generic socket domain/type/level/optname
+values and raw `sockaddr` bytes directly to host syscalls. When rvemu is
+cross-compiled for a target arch and run under qemu-user, qemu-user translates
+those syscalls as target-ABI calls: MIPS renumbers `SOCK_STREAM`/`SOCK_DGRAM`
+and `SOL_SOCKET`/optname values, and BE targets read `sa_family`/host-order
+`sockaddr_in6` fields in target byte order. The guest's Linux-generic bytes
+were therefore mis-translated.
+*Fix:* guest→host translation in `src/syscall.c`: `guest_sock_domain_to_host`,
+`guest_sock_type_to_host` (including `SOCK_NONBLOCK`/`SOCK_CLOEXEC` flag bits),
+`guest_sockopt_level_to_host`/`guest_sockopt_optname_to_host`, and
+`guest_sockaddr_to_host`/`host_sockaddr_to_guest` (fix `sa_family` and, for
+AF_INET6, `sin6_flowinfo`/`sin6_scope_id` byte order; port/addr remain NBO).
+Applied to `socket`, `connect`, `sendto`, `recvfrom`, `setsockopt`,
+`getsockopt`.
+*Result:* net.bin passes on all 10 runnable arches.
+
 ## Scope decisions
 
 **riscv32 — excluded (toolchain limit, not an emulator defect).** The
@@ -132,8 +146,9 @@ failure, and it does not gate the matrix.
 **Untested-but-known host-dependent surfaces (documented, not expanded):**
 - `sys_fcntl` `F_GETFL` — returns a host `open` mode; not exercised by the
   mandatory gates.
-- Socket `level` / `optname` values — host-numbered; only reachable via the
-  best-effort `net` guest.
+- Socket `level` / `optname` translation covers `SOL_SOCKET` and common
+  `SO_*` options; uncommon option names/values and option payload layouts may
+  still be ABI-dependent and are not exhaustively exercised.
 
 ## Artifacts
 > `out/` and `bin/` are gitignored — no build or run artifacts are committed.
