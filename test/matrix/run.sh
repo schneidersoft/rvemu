@@ -50,7 +50,7 @@ fi
 
 echo
 echo "==> running matrix inside container ($IMAGE)"
-# The repo root is bind-mounted at /workspace and used as workdir, so matrix.sh can
+# The repo root is bind-mounted at /workspace and used as workdir, so matrix.py can
 # see the sources, the prebuilt guest bins, and write its logs under out/.
 mkdir -p "$ROOT/out"
 podman run --rm \
@@ -58,4 +58,4 @@ podman run --rm \
     --workdir /workspace \
     --network=host \
     "$IMAGE" \
-    bash test/matrix/matrix.sh
+    python3 test/matrix/matrix.py

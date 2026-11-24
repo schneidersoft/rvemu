@@ -10,6 +10,10 @@ host's ABI (endianness, errno numbering, open-flag layout, 128-bit arithmetic,
 - Guest is fixed: little-endian rv64i/lp64. `rtest.bin` (ISA) and `stest.bin`
   (syscall) are mandatory gates; `ttest.bin` is a mandatory negative control;
   `net.bin` (sockets) is best-effort.
+- `net` is hermetic since the loopback redesign: it dials a local HTTP server
+  (`test/net/net.py` serves `test/net/index.html` on `127.0.0.1:8931` in-process
+  and runs the guest), so no external network or DNS and no separate server
+  process is needed; a runner without `python3` reports `net=N/A`.
 - Verdict: a guest PASSES iff the emulator process it runs exits 0 (guests only
   `exit_group(0)` after every self-check passed). `ttest.bin` is inverted: it
   executes a reserved CUSTOM-0 instruction, so it PASSES iff the emulator traps
@@ -17,30 +21,45 @@ host's ABI (endianness, errno numbering, open-flag layout, 128-bit arithmetic,
   silently kept running — a bug.
 - Environment: `ruby`/`podman`, image `rvemu-matrix:local`, Ubuntu 24.04 cross
   gcc toolchains + `qemu-user`.
-- Harness: `matrix.sh` (see `Dockerfile`). Final table is the last all-green run
-  (after all fixes, riscv32 dropped): `out/matrix-final.log`, exit 0,
-  "MATRIX: all mandatory guests passed".
+- Harness: `matrix.py` (single Python file; see `Dockerfile`). Final table is the
+  last all-green run (after all fixes, riscv32 dropped): `out/matrix-final.log`,
+  exit 0, "MATRIX: all mandatory guests passed".
 
-## Final matrix (all 9 runnable arches pass both gates)
+## Final matrix (all 10 runnable arches pass the mandatory gates)
 
-| arch | rtest | stent | net (best-effort) |
-|------|-------|-------|-------------------|
-| x86_64 | PASS | PASS | PASS |
-| aarch64 | PASS | PASS | PASS |
-| arm | PASS | PASS | TIMEOUT |
-| mipsel | PASS | PASS | FAIL |
-| powerpc64le | PASS | PASS | TIMEOUT |
-| powerpc64 | PASS | PASS | FAIL |
-| powerpc | PASS | PASS | FAIL |
-| s390x | PASS | PASS | FAIL |
-| riscv64 | PASS | PASS | PASS |
+| arch | rtest | stest | ttest | net (best-effort) |
+|------|-------|-------|-------|-------------------|
+| x86_64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| aarch64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| arm | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| mipsel | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| powerpc64le | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| powerpc64 | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| powerpc | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| s390x | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
+| riscv64 | PASS | PASS | PASS (trapped, rc=1) | PASS |
+| mips | PASS | PASS | PASS (trapped, rc=1) | FAIL(rc=1) |
 
 **riscv32 is excluded** — see "Scope decision" below.
 
-All 9 runnable arches pass both mandatory gates (rtest + stent). `net` is an
-optional best-effort guest: it is sensitive to the host's socket errno values
-(ENOTSOCK/EADDRINUSE, ...) and to qemu-user socket emulation, so it is not
-counted toward the pass/fail verdict. It is listed for completeness.
+All 10 runnable arches pass the mandatory gates (rtest, stest, and the ttest
+negative control). `net` is an optional best-effort guest and is not counted
+toward the pass/fail verdict; it is listed for completeness.
+
+> **Note on `net`:** the original design fetched `google.com:80`, so pass/fail
+> depended on external egress. It is now hermetic: `net.bin` dials a throwaway
+> local HTTP server on `127.0.0.1:8931` (`test/net/net.py`) and checks an
+> `HTTP 200` response with a known marker. Little-endian non-MIPS hosts
+> (x86_64, aarch64, arm, ppc64le, riscv64) pass. MIPS targets (mips, mipsel)
+> and big-endian hosts (powerpc64, powerpc, s390x) fail under nested qemu-user:
+> qemu-user translates the target ABI's socket constants/`sockaddr` to the host
+> ABI, but the guest here is fixed LE RISC-V and emits host-ABI socket bytes.
+> qemu-user 8.2.2 mangles them on those targets (e.g. MIPS swaps
+> `SOCK_STREAM`/`SOCK_DGRAM`; BE targets read a byte-swapped `sa_family`),
+> yielding `EAFNOSUPPORT`/`ENOPROTOOPT` from inside qemu. This is a limitation
+> of nesting qemu-user under rvemu's syscall proxy, not an rvemu host-ABI
+> defect: the mandatory gates pass on every arch, and the net failure mode is
+> confined to qemu's own translation layer.
 
 ## Defect classes found and fixed
 
@@ -106,7 +125,7 @@ host-ABI coverage that the 32-bit mips pair already exercises.
 distro actually provides and warn about skipped entries. Noble
 (ubuntu:24.04 — the image base and the CI runner) ships every entry, including
 `gcc-mips(-el)-linux-gnu`. Newer Ubuntu releases (26.04 "resolute") dropped
-those packages; on such a distro `matrix.sh` reports `mips`/`mipsel` as
+those packages; on such a distro `matrix.py` reports `mips`/`mipsel` as
 `N/A [no <arch>-linux-gnu-gcc]` — an absent toolchain, not an emulator
 failure, and it does not gate the matrix.
 

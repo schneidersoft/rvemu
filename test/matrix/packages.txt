@@ -1,5 +1,5 @@
 # Cross-compile toolchains + qemu-user for the portability matrix
-# (test/matrix/matrix.sh), plus the rv64i guest toolchain (makefile).
+# (test/matrix/matrix.py), plus the rv64i guest toolchain (makefile).
 #
 # SINGLE SOURCE OF TRUTH — consumed by:
 #   test/matrix/Dockerfile           apt-get install --no-install-recommends
@@ -16,7 +16,7 @@
 # and warn/report about the skipped ones. Noble (ubuntu:24.04 — the
 # Dockerfile base and the CI runner) still ships every entry, including
 # mips/mipsel; newer Ubuntu (26.04) dropped the mips/mipsel cross gccs.
-# On a distro lacking a cross gcc, matrix.sh reports that arch as
+# On a distro lacking a cross gcc, matrix.py reports that arch as
 # N/A [no <gcc>] instead of failing the matrix.
 ca-certificates
 gcc
@@ -43,3 +43,6 @@ libc6-dev-s390x-cross
 libc6-dev-riscv64-cross
 qemu-user
 gcc-riscv64-unknown-elf
+# Host of the hermetic net test: test/net/net.py serves test/net/ over
+# 127.0.0.1 in-process (noble and the CI runner ship python3).
+python3

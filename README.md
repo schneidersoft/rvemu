@@ -29,8 +29,11 @@ The same directory also provides `string.h`, `stdlib.h` (`exit`, `atoi`,
 `perror`, `strerror`), `unistd.h`, `time.h`/`sys/time.h`, and a small BSD socket
 layer (`sys/socket.h`, `netdb.h`, `errno.h`). `getaddrinfo` is backed by a stub
 DNS resolver that reads `/etc/resolv.conf` and falls back to `8.8.8.8` and
-`1.1.1.1`; see `test/net.c`, which `make net` builds and runs against the host
-network.
+`1.1.1.1` (IPv4 literals short-circuit it, so local addresses need no DNS).
+`test/net.c`, built and run by `make net`, is a hermetic net test: a single
+script (`test/net/net.py`) serves `test/net/index.html` on `127.0.0.1:8931`
+in-process and runs the emulator against it; the guest verifies an `HTTP 200`
+with a known marker — no external network, no DNS.
 
 # using the library
 

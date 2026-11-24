@@ -4,7 +4,7 @@
 # The package list lives in test/matrix/packages.txt (single source of truth,
 # shared with .github/workflows/makefile.yml); comments/blank lines are
 # filtered out here. Availability is honored the same way: packages the base
-# distro has no candidate for are skipped with a note (matrix.sh then reports
+# distro has no candidate for are skipped with a note (matrix.py then reports
 # that arch as N/A) — on the noble base today the full list installs.
 FROM ubuntu:24.04
 

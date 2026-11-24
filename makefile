@@ -12,8 +12,9 @@ NETHEADERS=test/linux.h test/stdlib/stdio.h test/stdlib/string.h test/stdlib/std
 
 .PHONY: all test net clean
 
-# `all` is the mandatory gate only. `net` depends on external network access
-# (google.com:80), so it stays a separate, best-effort, never-gating target.
+# `all` is the mandatory gate only. `net` dials a throwaway local HTTP server
+# (test/net/net.py, 127.0.0.1:8931) — hermetic, no external network or DNS
+# — and is therefore best-effort, never gating CI.
 all: bin/riscv64i test
 
 test: bin/riscv64i bin/rtest.bin bin/htest.elf bin/stest.bin bin/ttest.bin
@@ -85,7 +86,7 @@ bin/net.bin: $(NETTEST) $(NETHEADERS) test/riscv.ld
 
 net: bin/riscv64i bin/net.bin
 	@echo "-------"
-	./bin/riscv64i bin/net.bin
+	python3 test/net/net.py ./bin/riscv64i bin/net.bin
 
 clean:
 	rm -rf bin out

@@ -6,7 +6,7 @@
 // is reserved on rv64i — the CUSTOM-0 opcode (0b0001011) — and relies on the
 // core trapping it (invop_cb) and halting the run with a non-zero status.
 //
-// Verdict (see makefile / matrix.sh): PASSED iff the emulator process exits
+// Verdict (see makefile / matrix.py): PASSED iff the emulator process exits
 // non-zero here. If main() manages to return, the decode was wrong and the
 // harness reports a failure.
 

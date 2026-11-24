@@ -33,6 +33,10 @@ enum {
 
 static uint16_t byte_swap16(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 
+static uint32_t byte_swap32(uint32_t value) {
+    return (uint32_t)(((value & 0xFF000000U) >> 24) | ((value & 0x00FF0000U) >> 8) | ((value & 0x0000FF00U) << 8) | ((value & 0x000000FFU) << 24));
+}
+
 static uint16_t get_be16(const uint8_t *data) { return (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]); }
 
 static void put_be16(uint8_t *data, uint16_t value) {
@@ -82,7 +86,9 @@ static int parse_ipv4(const char *text, uint32_t *address) {
     if (parts != 4) {
         return -1;
     }
-    *address = result;
+    /* result is in host order (first octet in the top byte); s_addr must hold
+     * network byte order, i.e. the first octet in the first memory byte. */
+    *address = byte_swap32(result);
     return 0;
 }
 

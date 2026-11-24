@@ -1,3 +1,21 @@
+/*
+ * Hermetic net self-test.
+ *
+ * Dials a local HTTP server on 127.0.0.1:8931 (test/net/net.py serves
+ * test/net/index.html in-process), performs an
+ * HTTP/1.1 `GET /`, reads the whole response, and verifies:
+ *
+ *   - the HTTP status is 200
+ *   - the body contains the marker `rvemu-net-ok`
+ *
+ * No DNS or external network is needed: the stub resolver
+ * (test/stdlib/net.c) short-circuits IPv4 literals, and 127.0.0.1 reaches
+ * the server straight through the host's loopback via the emulator's
+ * socket forwarding.
+ *
+ * Exit status: 0 (PASS) iff the checks above held; anything else (no
+ * server, connection refused, non-200, missing marker) is a FAIL.
+ */
 
 #include <netdb.h>
 #include <stdio.h>
@@ -8,34 +26,39 @@
 #include <time.h>
 #include <unistd.h>
 
-#define HOST "google.com"
-#define PORT "80"
-#define BUFFER_SIZE 4096
+#define HOST "127.0.0.1"
+#define PORT "8931"
+#define MARKER "rvemu-net-ok"
+#define BUFFER_SIZE 8192 /* server headers + index.html, with room to spare */
 
 int main(void) {
     struct addrinfo hints, *res;
+    int status;
     int sock;
-    char buffer[BUFFER_SIZE];
+    int bytes;
+    int first = 1;
+    int ok = 1;
+    char buffer[BUFFER_SIZE + 1];
+    size_t total = 0;
+    struct timeval t0, t1;
 
-    struct timeval start, end;
+    printf("[*] hermetic net test: dial %s:%s\n", HOST, PORT);
 
-    // 1. DNS resolution
-    printf("[*] Resolving %s...\n", HOST);
+    gettimeofday(&t0, NULL);
 
+    // 1. Resolve — an IPv4 literal; the stub resolver does not emit DNS.
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    int status = getaddrinfo(HOST, PORT, &hints, &res);
+    status = getaddrinfo(HOST, PORT, &hints, &res);
 
     if (status != 0) {
-        fprintf(stderr, "DNS error: %s\n", gai_strerror(status));
+        fprintf(stderr, "FAIL: getaddrinfo(%s): %s\n", HOST, gai_strerror(status));
         return 1;
     }
 
-    printf("[+] DNS resolution successful\n");
-
-    // 2. Create TCP socket
+    // 2. Connect.
     sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
     if (sock < 0) {
@@ -44,11 +67,6 @@ int main(void) {
         return 1;
     }
 
-    // 3. Connect to server
-    printf("[*] Connecting to %s:%s...\n", HOST, PORT);
-
-    gettimeofday(&start, NULL);
-
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
         perror("connect");
         close(sock);
@@ -56,27 +74,20 @@ int main(void) {
         return 1;
     }
 
-    gettimeofday(&end, NULL);
-
     freeaddrinfo(res);
 
-    double tcp_time = (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
+    printf("[+] TCP connection to %s:%s established\n", HOST, PORT);
 
-    printf("[+] TCP connection established!\n");
-    printf("[+] TCP connection time: %.2f ms\n", tcp_time);
-
-    // 4. Send HTTP GET request
+    // 3. Send the request.
     char request[512];
 
     snprintf(request, sizeof(request),
              "GET / HTTP/1.1\r\n"
              "Host: %s\r\n"
-             "User-Agent: Simple-C-Monitor/1.0\r\n"
+             "User-Agent: rvemu-net-test/1.0\r\n"
              "Connection: close\r\n"
              "\r\n",
              HOST);
-
-    printf("[*] Sending HTTP request...\n");
 
     if (send(sock, request, strlen(request), 0) < 0) {
         perror("send");
@@ -84,38 +95,55 @@ int main(void) {
         return 1;
     }
 
-    // 5. Receive server response
-    printf("\n========== HTTP RESPONSE ==========\n");
+    printf("[*] GET / sent\n");
 
-    int bytes;
-    int first = 1;
-
-    while ((bytes = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
-
-        buffer[bytes] = '\0';
-
+    // 4. Read the whole response. The server closes the connection after
+    //    its reply, so `recv()` returns 0 when it is done.
+    while ((bytes = recv(sock, buffer + total, sizeof(buffer) - 1 - total, 0)) > 0) {
         if (first) {
-            gettimeofday(&end, NULL);
-
-            double response_time = (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
-
-            printf("[+] Time to first response: %.2f ms\n", response_time);
-
             first = 0;
+            gettimeofday(&t1, NULL);
         }
-
-        printf("%s", buffer);
+        total += (size_t)bytes;
     }
 
-    printf("\n===================================\n");
-
-    if (bytes < 0)
+    if (bytes < 0) {
         perror("recv");
+        close(sock);
+        return 1;
+    }
 
-    // 6. Cleanup
+    buffer[total] = '\0';
     close(sock);
 
-    printf("[+] Connection closed\n");
+    printf("[*] received %d bytes, connection closed\n", (int)total);
 
-    return 0;
+    if (!first) {
+        double ttfb = (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
+        printf("[+] first byte after %.2f ms\n", ttfb);
+    }
+
+    // 5. Verify the response.
+    printf("\n--- server response ---\n%s\n--------------------\n", buffer);
+
+    if (total == 0) {
+        fprintf(stderr, "FAIL: server closed the connection without sending anything\n");
+        ok = 0;
+    }
+    else if (strncmp(buffer, "HTTP/1.0 200", 12) != 0 && strncmp(buffer, "HTTP/1.1 200", 12) != 0) {
+        fprintf(stderr, "FAIL: expected HTTP 200, got: %s\n", buffer);
+        ok = 0;
+    }
+    else if (strstr(buffer, MARKER) == NULL) {
+        fprintf(stderr, "FAIL: marker %s not found in response\n", MARKER);
+        ok = 0;
+    }
+
+    if (ok) {
+        printf("[+] PASS: HTTP 200 with marker %s from %s:%s\n", MARKER, HOST, PORT);
+        return 0;
+    }
+
+    printf("[-] FAIL\n");
+    return 1;
 }
