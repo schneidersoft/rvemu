@@ -1,0 +1,45 @@
+# Cross-compile toolchains + qemu-user for the portability matrix
+# (test/matrix/matrix.sh), plus the rv64i guest toolchain (makefile).
+#
+# SINGLE SOURCE OF TRUTH — consumed by:
+#   test/matrix/Dockerfile           apt-get install --no-install-recommends
+#   .github/workflows/makefile.yml   sudo apt-get install
+# Comments and blank lines are filtered by the consumers:
+#     $(grep -vE '^[[:space:]]*(#|$)' test/matrix/packages.txt)
+#
+# libc6-dev-*-cross are Recommends of the cross gccs; listed explicitly
+# because the Dockerfile uses --no-install-recommends (without them a cross
+# build has no stdint.h/stdio.h).
+#
+# This is a list of INTENT, not of hard requirements: consumers install only
+# the packages the current distro actually provides (apt-cache policy check)
+# and warn/report about the skipped ones. Noble (ubuntu:24.04 — the
+# Dockerfile base and the CI runner) still ships every entry, including
+# mips/mipsel; newer Ubuntu (26.04) dropped the mips/mipsel cross gccs.
+# On a distro lacking a cross gcc, matrix.sh reports that arch as
+# N/A [no <gcc>] instead of failing the matrix.
+ca-certificates
+gcc
+binutils-mipsel-linux-gnu
+gcc-mipsel-linux-gnu
+binutils-mips-linux-gnu
+gcc-mips-linux-gnu
+gcc-arm-linux-gnueabi
+gcc-aarch64-linux-gnu
+gcc-powerpc64le-linux-gnu
+gcc-powerpc64-linux-gnu
+gcc-powerpc-linux-gnu
+gcc-s390x-linux-gnu
+gcc-riscv64-linux-gnu
+libc6-dev
+libc6-dev-arm64-cross
+libc6-dev-armel-cross
+libc6-dev-mips-cross
+libc6-dev-mipsel-cross
+libc6-dev-powerpc-cross
+libc6-dev-ppc64-cross
+libc6-dev-ppc64el-cross
+libc6-dev-s390x-cross
+libc6-dev-riscv64-cross
+qemu-user
+gcc-riscv64-unknown-elf

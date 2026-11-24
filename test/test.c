@@ -115,12 +115,15 @@ int uECC_PRNG(uint8_t *dst, unsigned size) {
     return 1;
 }
 
+static int failures;  // gate: main() returns non-zero iff any self-check failed
+
 #define TEST(name, expr, expected) \
     do { \
         uint64_t result = (expr); \
         if (result != (expected)) { \
             DBG("FAIL: %s -> got %ld (0x%lx), expected %ld (0x%lx)", \
                    name, (int64_t)result, result, (int64_t)(expected), (uint64_t)(expected)); \
+            failures++; \
         } else { \
             DBG("PASS: %s", name); \
         } \
@@ -129,9 +132,9 @@ int uECC_PRNG(uint8_t *dst, unsigned size) {
 int main(void) {
     //    printf("test: %d\n", 1234);
     DBG("STARTING TESTS");
-    test_rotr();
-    test_shiftl();
-    test_or();
+    failures += test_rotr();
+    failures += test_shiftl();
+    failures += test_or();
 
     volatile uint32_t x = 4;
     assert(x * 2 == 8);
@@ -150,7 +153,10 @@ int main(void) {
     uint8_t expectd[] = "\xa5\x91\xa6\xd4\x0b\xf4\x20\x40\x4a\x01\x17\x33\xcf\xb7\xb1\x90\xd6\x2c"
                         "\x65\xbf\x0b\xcd\xa3\x2b\x57\xb2\x77\xd9\xad\x9f\x14\x6e";
     if (memcmp(expectd, hash, 32) != 0) {
-        DBG("sha256 FAILED");
+        DBG("FAIL: sha256", failures++);
+        DBG("sha256 FAILED (expected a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e)");
+    } else {
+        DBG("PASS: sha256");
     }
 
     uint8_t *aeskey = expectd;
@@ -162,6 +168,20 @@ int main(void) {
     DBG_HEX(pt, 16, "AES PT: ");
     AES_ECB_encrypt(&ctx, pt);
     DBG_HEX(pt, 16, "AES CT: ");
+
+    // Golden vector pinned with OpenSSL (aes-256-ecb, no pad).
+    // test/aes.h builds AES in AES256 mode, so the full
+    // 32-byte sha256("Hello World") digest is the key:
+    //   key = a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e
+    //   pt  = 30313233343536373839616263646566
+    const char expect_ct[16] = "\xad\x0c\xa1\x6a\xab\xfe\x77\xbd\x4e\x2a\x04\x78\xa9\x63\xd8\x82";
+    if (memcmp(pt, expect_ct, 16) != 0) {
+        DBG("FAIL: aes");
+        failures++;
+        DBG("aes FAILED (expected ad0ca16aabfe77bd4e2a0478a963d882)");
+    } else {
+        DBG("PASS: aes");
+    }
 
 
     //   MUL (low 64 bits)
@@ -219,5 +239,8 @@ int main(void) {
     TEST("REMU div0 -> dividend",
          ({ uint64_t a = 77, b = 0; (b == 0 ? a : a % b); }),
          77ULL);
-    return 0;
+
+    DBG("TESTS: %d failure(s)", failures);
+    // main() -> ebreak -> guest exit code, so a non-zero return gates the host.
+    return failures ? 1 : 0;
 }

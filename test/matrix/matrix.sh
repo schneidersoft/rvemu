@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
-# Cross-compile the rvemu *host* binary for a matrix of architectures and run the
-# prebuilt guest programs (rtest/stest = gates, net = best-effort) under qemu-user.
+# Cross-compile the rvemu *host* binary for a matrix of architectures and run
+# the prebuilt guest programs under qemu-user:
+#   rtest/bin stest.bin = mandatory gates;
+#   ttest.bin           = mandatory negative control — it executes an illegal
+#                         instruction, which the emulator MUST trap and exit
+#                         non-zero for;
+#   net.bin             = best-effort (external network), never gates.
 #
 # The guest is fixed little-endian RISC-V (rv64i/lp64). Any disagreement between
 # guest-visible behaviour on a big-endian host proves the emulator depends on
 # host endianness; on little-endian hosts it must behave identically to x86_64.
 #
-# Verdict: a guest PASSES iff the emulator process it runs exits 0.
-# (Guests call exit_group(0) only when every self-check passed.)
+# Verdict: a guest PASSES iff the emulator process it runs exits 0 (guests call
+# exit_group(0) only when every self-check passed). ttest.bin is inverted: it
+# PASSES iff the emulator exits NON-ZERO (rc!=124), i.e. it trapped the illegal
+# instruction; a zero exit or a timeout means the core kept running — a bug.
 set -u
 
 ROOT="$( cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd )"   # <root>/test/matrix -> repo root
@@ -15,7 +22,7 @@ cd "$ROOT"
 
 SRC="src/librv64i.c src/riscv64i.c src/syscall.c test/dbg.c"
 COMMON="-O2 -static -Wall -Werror -Itest -Isrc"
-GUESTS="rtest.bin stest.bin net.bin"
+GUESTS="rtest.bin stest.bin ttest.bin net.bin"
 RUN_TIMEOUT=90
 OUTDIR="out"
 mkdir -p "$OUTDIR"
@@ -54,17 +61,26 @@ while IFS='|' read -r arch gcc extra qemu; do
     echo "### arch=$arch"
 
     BIN="$OUTDIR/riscv64i-$arch"
+    if ! command -v "$gcc" >/dev/null 2>&1; then
+        # The gcc driver for this arch is not installed on this distro (newer
+        # Ubuntu releases dropped the mips/mipsel cross gccs; noble/24.04 still
+        # ships them). A missing toolchain is not a test failure: report N/A.
+        echo "  N/A: $gcc not available on this system"
+        TABLE="$TABLE
+arch=$arch | rtest=N/A | stest=N/A | ttest=N/A | net=N/A  [no $gcc]"
+        continue
+    fi
     if ! "$gcc" $COMMON $extra -o "$BIN" $SRC >"$OUTDIR/build-$arch.log" 2>&1; then
         echo "  build: FAIL (see out/build-$arch.log)"
         TABLE="$TABLE
-arch=$arch | rtest=N/A | stest=N/A | net=N/A  [build failed]"
+arch=$arch | rtest=N/A | stest=N/A | ttest=N/A | net=N/A  [build failed]"
         FAILURES=$((FAILURES + 1))
         continue
     fi
     if ! command -v "${qemu:-true}" >/dev/null 2>&1 && [ -n "$qemu" ]; then
         echo "  qemu missing: $qemu"
         TABLE="$TABLE
-arch=$arch | rtest=N/A | stest=N/A | net=N/A  [no $qemu]"
+arch=$arch | rtest=N/A | stest=N/A | ttest=N/A | net=N/A  [no $qemu]"
         FAILURES=$((FAILURES + 1))
         continue
     fi
@@ -74,20 +90,34 @@ arch=$arch | rtest=N/A | stest=N/A | net=N/A  [no $qemu]"
         run_guest "$qemu" "$BIN" "$guest"
         short=${guest%.bin}
         name="${arch}.${short}"
-        if [ $rc -eq 0 ]; then
-            v="PASS"
-        elif [ $rc -eq 124 ]; then
-            v="TIMEOUT"
-        else
-            v="FAIL(rc=$rc)"
-        fi
+        # net: best-effort, never gates. ttest: negative control (inverted
+        # verdict — the emulator MUST exit non-zero here, and not by timeout).
         optional=0
+        inverted=0
         [ "$short" = "net" ] && optional=1
-        if [ $rc -ne 0 ] && [ $optional -eq 0 ]; then
+        [ "$short" = "ttest" ] && inverted=1
+        if [ $inverted -eq 1 ]; then
+            if [ $rc -ne 0 ] && [ $rc -ne 124 ]; then
+                ok=1; v="PASS (trapped, rc=$rc)"
+            elif [ $rc -eq 124 ]; then
+                ok=0; v="TIMEOUT"
+            else
+                ok=0; v="FAIL(rc=$rc — ran past illegal instruction)"
+            fi
+        else
+            if [ $rc -eq 0 ]; then
+                ok=1; v="PASS"
+            elif [ $rc -eq 124 ]; then
+                ok=0; v="TIMEOUT"
+            else
+                ok=0; v="FAIL(rc=$rc)"
+            fi
+        fi
+        if [ $ok -eq 0 ] && [ $optional -eq 0 ]; then
             FAILURES=$((FAILURES + 1))
         fi
         echo "  $short: $v"
-        if [ $rc -ne 0 ] && [ $optional -eq 0 ]; then
+        if [ $ok -eq 0 ] && [ $optional -eq 0 ]; then
             echo "  --- guest output (first 25 lines) ---"
             head -25 "$OUTDIR/$guest.log" | sed 's/^/  | /'
             echo "  --- (full log: out/$guest.log) ---"
@@ -107,6 +137,6 @@ if [ $FAILURES -eq 0 ]; then
     echo "MATRIX: all mandatory guests passed"
     exit 0
 else
-    echo "MATRIX: $FAILURES mandatory failure(s) (net is best-effort and not counted)"
+    echo "MATRIX: $FAILURES mandatory failure(s) (net is best-effort and not counted; ttest is the mandatory negative control)"
     exit 1
 fi

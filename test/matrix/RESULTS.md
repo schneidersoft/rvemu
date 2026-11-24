@@ -8,9 +8,13 @@ host's ABI (endianness, errno numbering, open-flag layout, 128-bit arithmetic,
 ...); in practice none do once the four defect classes below are removed.
 
 - Guest is fixed: little-endian rv64i/lp64. `rtest.bin` (ISA) and `stest.bin`
-  (syscall) are mandatory gates; `net.bin` (sockets) is best-effort.
+  (syscall) are mandatory gates; `ttest.bin` is a mandatory negative control;
+  `net.bin` (sockets) is best-effort.
 - Verdict: a guest PASSES iff the emulator process it runs exits 0 (guests only
-  `exit_group(0)` after every self-check passed).
+  `exit_group(0)` after every self-check passed). `ttest.bin` is inverted: it
+  executes a reserved CUSTOM-0 instruction, so it PASSES iff the emulator traps
+  it and exits NON-ZERO (rc≠124); a zero exit or a timeout would mean the core
+  silently kept running — a bug.
 - Environment: `ruby`/`podman`, image `rvemu-matrix:local`, Ubuntu 24.04 cross
   gcc toolchains + `qemu-user`.
 - Harness: `matrix.sh` (see `Dockerfile`). Final table is the last all-green run
@@ -97,6 +101,15 @@ The emulator sources are architecture-independent and already compile cleanly
 dropped from the matrix rather than forcing a different toolchain; it adds no
 host-ABI coverage that the 32-bit mips pair already exercises.
 
+**MIPS toolchain availability (per-distro).** `packages.txt` is a list of
+*intent*; consumers (CI workflow + `Dockerfile`) install only what the current
+distro actually provides and warn about skipped entries. Noble
+(ubuntu:24.04 — the image base and the CI runner) ships every entry, including
+`gcc-mips(-el)-linux-gnu`. Newer Ubuntu releases (26.04 "resolute") dropped
+those packages; on such a distro `matrix.sh` reports `mips`/`mipsel` as
+`N/A [no <arch>-linux-gnu-gcc]` — an absent toolchain, not an emulator
+failure, and it does not gate the matrix.
+
 **Untested-but-known host-dependent surfaces (documented, not expanded):**
 - `sys_fcntl` `F_GETFL` — returns a host `open` mode; not exercised by the
   mandatory gates.
@@ -104,6 +117,12 @@ host-ABI coverage that the 32-bit mips pair already exercises.
   best-effort `net` guest.
 
 ## Artifacts
+> `out/` and `bin/` are gitignored — no build or run artifacts are committed.
+> The logs below are from the historical runs this document cites; reproduce
+> any of them with `test/matrix/run.sh` (podman image `rvemu-matrix:local`) or
+> via CI, where every run uploads `out/` as the `rvemu-logs` artifact
+> (retention 30 days).
+
 - Final all-green matrix log: `out/matrix-final.log`
 - Run C (post-class-4, pre-riscv32-drop) and Run B (pre-class-4, original
   failures): `out/matrix-runC.log`, `out/matrix-runB.log`

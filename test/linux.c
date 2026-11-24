@@ -35,7 +35,10 @@ int main(void) {
     check("fgets size 1", fgets(empty, 1, stdin) == empty && empty[0] == '\0');
 
     // File I/O is forwarded to the host filesystem.
-    const char *path = "bin/syscall-test.tmp";
+    // CWD-relative on purpose: the harness runs the emulator from the repo
+    // root (and the matrix container from any directory), so no subdir
+    // assumption is allowed here.
+    const char *path = "syscall-test.tmp";
     const char content[] = "hello from riscv\n";
     const long content_length = (long)(sizeof(content) - 1);
     long fd = linux_openat(AT_FDCWD, path, O_CREAT | O_TRUNC | O_RDWR, 0644);

@@ -124,13 +124,20 @@ int main(int argc, char **argv) {
         uint32_t inst = cpu_fetch(&cpu);
 
         if (cpu_execute(&cpu, inst)) {
+            // A graceful exit (exit syscall or ebreak) sets `guest_exited` via
+            // end_guest(). If the core reports an error but the guest never
+            // exited, it is a core-level failure (e.g. an illegal instruction
+            // that must be trapped) — report it and fail the run instead of
+            // exiting with the guest's never-set status (a silent pass).
             if (!guest_exited) {
-                DBG("execute error");
+                DBG("execute error: guest did not exit");
+                return 1;
             }
             break;
         }
 
     } while (1);
 
+    // The guest terminated itself; surface its exit status.
     return guest_exit_code;
 }

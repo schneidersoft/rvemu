@@ -5,36 +5,45 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     steps:
     - uses: actions/checkout@v4
 
-    # Guest toolchain + the exact cross/gcc + qemu-user set the
-    # portability matrix uses (test/matrix/Dockerfile).
+    # Guest toolchain + the exact cross/gcc + qemu-user set the portability
+    # matrix uses (test/matrix/Dockerfile). One shared list:
+    # test/matrix/packages.txt (single source of truth).
+    #
+    # Pinned to ubuntu-24.04 because it ships every cross gcc in the list,
+    # including mips/mipsel, which newer Ubuntu releases (26.04) have dropped.
+    # Defense-in-depth for any runner distro: install only the packages that
+    # distro actually provides and warn about the rest; matrix.sh reports an
+    # arch as N/A (not a failure) when its gcc is absent.
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          gcc-riscv64-unknown-elf \
-          binutils-mipsel-linux-gnu gcc-mipsel-linux-gnu \
-          binutils-mips-linux-gnu gcc-mips-linux-gnu \
-          gcc-arm-linux-gnueabi \
-          gcc-aarch64-linux-gnu \
-          gcc-powerpc64le-linux-gnu \
-          gcc-powerpc64-linux-gnu \
-          gcc-powerpc-linux-gnu \
-          gcc-s390x-linux-gnu \
-          gcc-riscv64-linux-gnu \
-          qemu-user
+        INSTALLED=""
+        SKIPPED=""
+        for p in $(grep -vE '^[[:space:]]*(#|$)' test/matrix/packages.txt); do
+          if apt-cache policy "$p" 2>/dev/null | awk '/Candidate:/{print $2; exit}' | grep -qE '[0-9]'; then
+            INSTALLED="$INSTALLED $p"
+          else
+            SKIPPED="$SKIPPED $p"
+          fi
+        done
+        if [ -n "$SKIPPED" ]; then
+          echo "::warning::packages not available on this runner, skipped:$SKIPPED"
+        fi
+        sudo apt-get install -y $INSTALLED
 
     # Build the emulator and every guest binary without running anything.
     - name: Build (emulator + guest binaries)
-      run: make bin/riscv64i bin/htest.elf bin/rtest.bin bin/stest.bin bin/net.bin
+      run: make bin/riscv64i bin/htest.elf bin/rtest.bin bin/stest.bin bin/ttest.bin bin/net.bin
 
     # Mandatory gates (host build, native run).
     - name: Run mandatory test suite
@@ -42,6 +51,14 @@ jobs:
         ./bin/htest.elf
         ./bin/riscv64i bin/rtest.bin
         ./bin/riscv64i bin/stest.bin
+        # Negative control: the ttest guest executes an illegal instruction,
+        # so the emulator must trap it and exit NON-ZERO. A zero exit would
+        # mean the core silently kept running — that is a bug, fail it.
+        if ./bin/riscv64i bin/ttest.bin; then
+          echo "::error::ttest — emulator ran past an illegal instruction"
+          exit 1
+        fi
+        echo "OK: ttest illegal instruction trapped with non-zero exit"
 
     # Best-effort: network dependent (google.com:80); must not gate CI.
     - name: Run net guest (best effort)
@@ -53,7 +70,8 @@ jobs:
         fi
 
     # QEMU portability matrix: cross-compile the emulator host for every arch
-    # and run the mandatory guests under qemu-user (net stays best-effort).
+    # and run the guests under qemu-user (ttest = negative control,
+    # net = best-effort, both mirrored in test/matrix/matrix.sh).
     # Exits non-zero only when a mandatory gate fails on a runnable arch.
     - name: QEMU cross-arch portability matrix
       run: test/matrix/matrix.sh
@@ -64,3 +82,4 @@ jobs:
         name: rvemu-logs
         path: out
         if-no-files-found: ignore
+        retention-days: 30
