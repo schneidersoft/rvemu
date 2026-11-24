@@ -48,7 +48,7 @@ bin/riscv64i.o: src/riscv64i.c src/librv64i.h src/syscall.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/syscall.o: src/syscall.c src/syscall.h src/librv64i.h
+bin/syscall.o: src/syscall.c src/syscall.h src/librv64i.h src/guest.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
@@ -56,21 +56,21 @@ bin/dbg.o: test/dbg.c test/dbg.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/linux.h test/stdlib/stdio.h
+bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/linux.h src/guest.h test/stdlib/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(GUESTTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(GUESTTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/rtest.elf bin/rtest.bin
 	riscv64-unknown-elf-objdump -d bin/rtest.elf > bin/rtest.elf.disas
 
-bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/linux.h test/stdlib/stdio.h
+bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/linux.h src/guest.h test/stdlib/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/stest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(SYSCALLTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/stest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(SYSCALLTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/stest.elf bin/stest.bin
 	riscv64-unknown-elf-objdump -d bin/stest.elf > bin/stest.elf.disas
 
 bin/ttest.bin: $(TRAPTEST) test/riscv.ld test/stdlib/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/ttest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(TRAPTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/ttest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(TRAPTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/ttest.elf bin/ttest.bin
 	riscv64-unknown-elf-objdump -d bin/ttest.elf > bin/ttest.elf.disas
 
@@ -78,9 +78,9 @@ bin/htest.elf: $(TESTSRC)
 	@mkdir -p bin
 	gcc -ggdb -o bin/htest.elf -Wall -Werror $(TESTSRC)
 
-bin/net.bin: $(NETTEST) $(NETHEADERS) test/riscv.ld
+bin/net.bin: $(NETTEST) $(NETHEADERS) src/guest.h test/riscv.ld
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/net.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(NETTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/net.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/ -I./test/ -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(NETTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/net.elf bin/net.bin
 	riscv64-unknown-elf-objdump -d bin/net.elf > bin/net.elf.disas
 

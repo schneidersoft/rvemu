@@ -24,6 +24,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#define NAMESPACE guest
+#include "guest.h"
+
 enum {
     RV_MAP_PRIVATE = 0x02,
     RV_MAP_FIXED = 0x10,
@@ -107,275 +110,275 @@ static int finish(cpu_t *cpu, int64_t value) {
 static int guest_errno(int host_errno) {
 #ifdef EPERM
     if (host_errno == EPERM)
-        return 1;
+        return guest_EPERM;
 #endif
 #ifdef ENOENT
     if (host_errno == ENOENT)
-        return 2;
+        return guest_ENOENT;
 #endif
 #ifdef ESRCH
     if (host_errno == ESRCH)
-        return 3;
+        return guest_ESRCH;
 #endif
 #ifdef EINTR
     if (host_errno == EINTR)
-        return 4;
+        return guest_EINTR;
 #endif
 #ifdef EIO
     if (host_errno == EIO)
-        return 5;
+        return guest_EIO;
 #endif
 #ifdef ENXIO
     if (host_errno == ENXIO)
-        return 6;
+        return guest_ENXIO;
 #endif
 #ifdef E2BIG
     if (host_errno == E2BIG)
-        return 7;
+        return guest_E2BIG;
 #endif
 #ifdef ENOEXEC
     if (host_errno == ENOEXEC)
-        return 8;
+        return guest_ENOEXEC;
 #endif
 #ifdef EBADF
     if (host_errno == EBADF)
-        return 9;
+        return guest_EBADF;
 #endif
 #ifdef ECHILD
     if (host_errno == ECHILD)
-        return 10;
+        return guest_ECHILD;
 #endif
 #ifdef EAGAIN
     if (host_errno == EAGAIN)
-        return 11;
+        return guest_EAGAIN;
 #endif
 #ifdef ENOMEM
     if (host_errno == ENOMEM)
-        return 12;
+        return guest_ENOMEM;
 #endif
 #ifdef EACCES
     if (host_errno == EACCES)
-        return 13;
+        return guest_EACCES;
 #endif
 #ifdef EFAULT
     if (host_errno == EFAULT)
-        return 14;
+        return guest_EFAULT;
 #endif
 #ifdef ENOTBLK
     if (host_errno == ENOTBLK)
-        return 15;
+        return guest_ENOTBLK;
 #endif
 #ifdef EBUSY
     if (host_errno == EBUSY)
-        return 16;
+        return guest_EBUSY;
 #endif
 #ifdef EEXIST
     if (host_errno == EEXIST)
-        return 17;
+        return guest_EEXIST;
 #endif
 #ifdef EXDEV
     if (host_errno == EXDEV)
-        return 18;
+        return guest_EXDEV;
 #endif
 #ifdef ENODEV
     if (host_errno == ENODEV)
-        return 19;
+        return guest_ENODEV;
 #endif
 #ifdef ENOTDIR
     if (host_errno == ENOTDIR)
-        return 20;
+        return guest_ENOTDIR;
 #endif
 #ifdef EISDIR
     if (host_errno == EISDIR)
-        return 21;
+        return guest_EISDIR;
 #endif
 #ifdef EINVAL
     if (host_errno == EINVAL)
-        return 22;
+        return guest_EINVAL;
 #endif
 #ifdef ENFILE
     if (host_errno == ENFILE)
-        return 23;
+        return guest_ENFILE;
 #endif
 #ifdef EMFILE
     if (host_errno == EMFILE)
-        return 24;
+        return guest_EMFILE;
 #endif
 #ifdef ENOSR
     if (host_errno == ENOSR)
-        return 63;
+        return guest_ENOSR;
 #endif
 #ifdef ENOSPC
     if (host_errno == ENOSPC)
-        return 28;
+        return guest_ENOSPC;
 #endif
 #ifdef ESPIPE
     if (host_errno == ESPIPE)
-        return 29;
+        return guest_ESPIPE;
 #endif
 #ifdef EROFS
     if (host_errno == EROFS)
-        return 30;
+        return guest_EROFS;
 #endif
 #ifdef EMLINK
     if (host_errno == EMLINK)
-        return 31;
+        return guest_EMLINK;
 #endif
 #ifdef EPIPE
     if (host_errno == EPIPE)
-        return 32;
+        return guest_EPIPE;
 #endif
 #ifdef EDOM
     if (host_errno == EDOM)
-        return 33;
+        return guest_EDOM;
 #endif
 #ifdef ERANGE
     if (host_errno == ERANGE)
-        return 34;
+        return guest_ERANGE;
 #endif
 #ifdef EDEADLK
     if (host_errno == EDEADLK)
-        return 35;
+        return guest_EDEADLK;
 #endif
 #ifdef ENAMETOOLONG
     if (host_errno == ENAMETOOLONG)
-        return 36;
+        return guest_ENAMETOOLONG;
 #endif
 #ifdef ENOLCK
     if (host_errno == ENOLCK)
-        return 37;
+        return guest_ENOLCK;
 #endif
 #ifdef ENOSYS
     if (host_errno == ENOSYS)
-        return 38;
+        return guest_ENOSYS;
 #endif
 #ifdef ENOTEMPTY
     if (host_errno == ENOTEMPTY)
-        return 39;
+        return guest_ENOTEMPTY;
 #endif
 #ifdef ELOOP
     if (host_errno == ELOOP)
-        return 40;
+        return guest_ELOOP;
 #endif
 #ifdef ENOMSG
     if (host_errno == ENOMSG)
-        return 42;
+        return guest_ENOMSG;
 #endif
 #ifdef ENODATA
     if (host_errno == ENODATA)
-        return 61;
+        return guest_ENODATA;
 #endif
 #ifdef ENOTSOCK
     if (host_errno == ENOTSOCK)
-        return 88;
+        return guest_ENOTSOCK;
 #endif
 #ifdef EDESTADDRREQ
     if (host_errno == EDESTADDRREQ)
-        return 89;
+        return guest_EDESTADDRREQ;
 #endif
 #ifdef EMSGSIZE
     if (host_errno == EMSGSIZE)
-        return 90;
+        return guest_EMSGSIZE;
 #endif
 #ifdef EPROTOTYPE
     if (host_errno == EPROTOTYPE)
-        return 91;
+        return guest_EPROTOTYPE;
 #endif
 #ifdef ENOPROTOOPT
     if (host_errno == ENOPROTOOPT)
-        return 92;
+        return guest_ENOPROTOOPT;
 #endif
 #ifdef EPROTONOSUPPORT
     if (host_errno == EPROTONOSUPPORT)
-        return 93;
+        return guest_EPROTONOSUPPORT;
 #endif
 #ifdef EOPNOTSUPP
     if (host_errno == EOPNOTSUPP)
-        return 95;
+        return guest_EOPNOTSUPP;
 #endif
 #ifdef EAFNOSUPPORT
     if (host_errno == EAFNOSUPPORT)
-        return 97;
+        return guest_EAFNOSUPPORT;
 #endif
 #ifdef EADDRINUSE
     if (host_errno == EADDRINUSE)
-        return 98;
+        return guest_EADDRINUSE;
 #endif
 #ifdef EADDRNOTAVAIL
     if (host_errno == EADDRNOTAVAIL)
-        return 99;
+        return guest_EADDRNOTAVAIL;
 #endif
 #ifdef ENETDOWN
     if (host_errno == ENETDOWN)
-        return 100;
+        return guest_ENETDOWN;
 #endif
 #ifdef ENETUNREACH
     if (host_errno == ENETUNREACH)
-        return 101;
+        return guest_ENETUNREACH;
 #endif
 #ifdef ENETRESET
     if (host_errno == ENETRESET)
-        return 102;
+        return guest_ENETRESET;
 #endif
 #ifdef ECONNABORTED
     if (host_errno == ECONNABORTED)
-        return 103;
+        return guest_ECONNABORTED;
 #endif
 #ifdef ECONNRESET
     if (host_errno == ECONNRESET)
-        return 104;
+        return guest_ECONNRESET;
 #endif
 #ifdef ENOBUFS
     if (host_errno == ENOBUFS)
-        return 105;
+        return guest_ENOBUFS;
 #endif
 #ifdef EISCONN
     if (host_errno == EISCONN)
-        return 106;
+        return guest_EISCONN;
 #endif
 #ifdef ENOTCONN
     if (host_errno == ENOTCONN)
-        return 107;
+        return guest_ENOTCONN;
 #endif
 #ifdef ESHUTDOWN
     if (host_errno == ESHUTDOWN)
-        return 108;
+        return guest_ESHUTDOWN;
 #endif
 #ifdef ETOOMANYREFS
     if (host_errno == ETOOMANYREFS)
-        return 109;
+        return guest_ETOOMANYREFS;
 #endif
 #ifdef ETIMEDOUT
     if (host_errno == ETIMEDOUT)
-        return 110;
+        return guest_ETIMEDOUT;
 #endif
 #ifdef ECONNREFUSED
     if (host_errno == ECONNREFUSED)
-        return 111;
+        return guest_ECONNREFUSED;
 #endif
 #ifdef EHOSTDOWN
     if (host_errno == EHOSTDOWN)
-        return 112;
+        return guest_EHOSTDOWN;
 #endif
 #ifdef EHOSTUNREACH
     if (host_errno == EHOSTUNREACH)
-        return 113;
+        return guest_EHOSTUNREACH;
 #endif
 #ifdef EALREADY
     if (host_errno == EALREADY)
-        return 114;
+        return guest_EALREADY;
 #endif
 #ifdef EINPROGRESS
     if (host_errno == EINPROGRESS)
-        return 115;
+        return guest_EINPROGRESS;
 #endif
 #ifdef EREMOTEIO
     if (host_errno == EREMOTEIO)
-        return 121;
+        return guest_EREMOTEIO;
 #endif
 #ifdef EDQUOT
     if (host_errno == EDQUOT)
-        return 122;
+        return guest_EDQUOT;
 #endif
     return host_errno;
 }
@@ -503,76 +506,60 @@ static int guest_store_u64(cpu_t *cpu, uint64_t address, uint64_t value) {
  * Interpret the guest bits against the asm-generic layout, then re-emit them
  * with the host's own O_* constants. O_ACCMODE (0/1/2) is portable across the
  * arches in the host matrix and passes through unchanged. */
-enum {
-    RVOF_ACCMODE   = 0x0003,
-    RVOF_CREAT     = 0x0040,
-    RVOF_EXCL      = 0x0080,
-    RVOF_NOCTTY    = 0x0100,
-    RVOF_TRUNC     = 0x0200,
-    RVOF_APPEND    = 0x0400,
-    RVOF_NONBLOCK  = 0x0800,
-    RVOF_DSYNC     = 0x1000,
-    RVOF_DIRECT    = 0x4000,
-    RVOF_DIRECTORY = 0x10000,
-    RVOF_NOFOLLOW  = 0x20000,
-    RVOF_NOATIME   = 0x40000,
-    RVOF_CLOEXEC   = 0x80000,
-};
-
 static int guest_open_to_host_flags(int guest_flags) {
-    int host_flags = guest_flags & O_ACCMODE;
+    int host_flags = guest_flags & guest_O_ACCMODE;
 #ifdef O_CREAT
-    if (guest_flags & RVOF_CREAT) {
+    if (guest_flags & guest_O_CREAT) {
         host_flags |= O_CREAT;
     }
 #endif
 #ifdef O_EXCL
-    if (guest_flags & RVOF_EXCL) {
+    if (guest_flags & guest_O_EXCL) {
         host_flags |= O_EXCL;
     }
 #endif
 #ifdef O_NOCTTY
-    if (guest_flags & RVOF_NOCTTY) {
+    if (guest_flags & guest_O_NOCTTY) {
         host_flags |= O_NOCTTY;
     }
 #endif
 #ifdef O_TRUNC
-    if (guest_flags & RVOF_TRUNC) {
+    if (guest_flags & guest_O_TRUNC) {
         host_flags |= O_TRUNC;
     }
 #endif
 #ifdef O_APPEND
-    if (guest_flags & RVOF_APPEND) {
+    if (guest_flags & guest_O_APPEND) {
         host_flags |= O_APPEND;
     }
 #endif
 #ifdef O_NONBLOCK
-    if (guest_flags & RVOF_NONBLOCK) {
+    if (guest_flags & guest_O_NONBLOCK) {
         host_flags |= O_NONBLOCK;
     }
 #endif
 #ifdef O_DSYNC
-    if (guest_flags & RVOF_DSYNC) {
+    if (guest_flags & guest_O_DSYNC) {
         host_flags |= O_DSYNC;
     }
 #endif
 #ifdef O_DIRECT
-    if (guest_flags & RVOF_DIRECT) {
+    if (guest_flags & guest_O_DIRECT) {
         host_flags |= O_DIRECT;
     }
 #endif
 #ifdef O_NOFOLLOW
-    if (guest_flags & RVOF_NOFOLLOW) {
+    if (guest_flags & guest_O_NOFOLLOW) {
         host_flags |= O_NOFOLLOW;
     }
 #endif
 #ifdef O_CLOEXEC
-    if (guest_flags & RVOF_CLOEXEC) {
+    if (guest_flags & guest_O_CLOEXEC) {
         host_flags |= O_CLOEXEC;
     }
 #endif
-    /* RVOF_LARGEFILE (always on for this 64-bit guest), RVOF_DIRECTORY, and
-     * RVOF_NOATIME are ABI-advisory; no host bit is required for them here. */
+    /* guest_O_LARGEFILE (always on for this 64-bit guest), guest_O_DIRECTORY, and
+     * guest_O_NOATIME are ABI-advisory; no host bit is required for them here. */
     return host_flags;
 }
 
@@ -1213,31 +1200,16 @@ static int sys_getrandom(cpu_t *cpu, sysstate_t *sys, const uint64_t args[6]) {
  * and BE targets read sockaddr fields in host byte order; forwarding the
  * guest's Linux-generic values verbatim therefore mis-translates on those
  * arches.  Map guest -> host here (mirrors guest_errno/guest_open_flags). */
-enum {
-    GUEST_AF_INET      = 2,
-    GUEST_AF_INET6     = 10,
-    GUEST_SOCK_STREAM  = 1,
-    GUEST_SOCK_DGRAM   = 2,
-    GUEST_SOCK_RAW     = 3,
-    GUEST_SOCK_RDM     = 4,
-    GUEST_SOCK_SEQPACKET = 5,
-    GUEST_SOCK_DCCP    = 6,
-    GUEST_SOCK_PACKET  = 10,
-    GUEST_SOCK_NONBLOCK = 00004000,
-    GUEST_SOCK_CLOEXEC  = 02000000,
-    GUEST_SOCK_TYPE_MASK = 0xf,
-};
-
 static int guest_sock_domain_to_host(int domain) {
     switch (domain) {
-    case GUEST_AF_INET:
+    case guest_AF_INET:
         return AF_INET;
 #ifdef AF_INET6
-    case GUEST_AF_INET6:
+    case guest_AF_INET6:
         return AF_INET6;
 #endif
 #ifdef AF_UNIX
-    case 1:
+    case guest_AF_UNIX:
         return AF_UNIX;
 #endif
     default:
@@ -1247,49 +1219,49 @@ static int guest_sock_domain_to_host(int domain) {
 
 static int guest_sock_type_to_host(int type) {
     int flags = 0;
-    int base = type & ~GUEST_SOCK_NONBLOCK & ~GUEST_SOCK_CLOEXEC;
+    int base = type & ~guest_SOCK_NONBLOCK & ~guest_SOCK_CLOEXEC;
     int host_type;
 
-    if (type & GUEST_SOCK_NONBLOCK) {
+    if (type & guest_SOCK_NONBLOCK) {
 #ifdef SOCK_NONBLOCK
         flags |= SOCK_NONBLOCK;
 #endif
     }
-    if (type & GUEST_SOCK_CLOEXEC) {
+    if (type & guest_SOCK_CLOEXEC) {
 #ifdef SOCK_CLOEXEC
         flags |= SOCK_CLOEXEC;
 #endif
     }
 
     switch (base) {
-    case GUEST_SOCK_STREAM:
+    case guest_SOCK_STREAM:
         host_type = SOCK_STREAM;
         break;
-    case GUEST_SOCK_DGRAM:
+    case guest_SOCK_DGRAM:
         host_type = SOCK_DGRAM;
         break;
 #ifdef SOCK_RAW
-    case GUEST_SOCK_RAW:
+    case guest_SOCK_RAW:
         host_type = SOCK_RAW;
         break;
 #endif
 #ifdef SOCK_RDM
-    case GUEST_SOCK_RDM:
+    case guest_SOCK_RDM:
         host_type = SOCK_RDM;
         break;
 #endif
 #ifdef SOCK_SEQPACKET
-    case GUEST_SOCK_SEQPACKET:
+    case guest_SOCK_SEQPACKET:
         host_type = SOCK_SEQPACKET;
         break;
 #endif
 #ifdef SOCK_DCCP
-    case GUEST_SOCK_DCCP:
+    case guest_SOCK_DCCP:
         host_type = SOCK_DCCP;
         break;
 #endif
 #ifdef SOCK_PACKET
-    case GUEST_SOCK_PACKET:
+    case guest_SOCK_PACKET:
         host_type = SOCK_PACKET;
         break;
 #endif
@@ -1300,80 +1272,76 @@ static int guest_sock_type_to_host(int type) {
     return host_type | flags;
 }
 
-enum {
-    GUEST_SOL_SOCKET = 1,
-};
-
 static int guest_sockopt_level_to_host(int level) {
-    if (level == GUEST_SOL_SOCKET)
+    if (level == guest_SOL_SOCKET)
         return SOL_SOCKET;
 #ifdef IPPROTO_IP
-    if (level == 0)
+    if (level == guest_IPPROTO_IP)
         return IPPROTO_IP;
 #endif
 #ifdef IPPROTO_TCP
-    if (level == 6)
+    if (level == guest_IPPROTO_TCP)
         return IPPROTO_TCP;
 #endif
 #ifdef IPPROTO_UDP
-    if (level == 17)
+    if (level == guest_IPPROTO_UDP)
         return IPPROTO_UDP;
 #endif
 #ifdef IPPROTO_IPV6
-    if (level == 41)
+    if (level == guest_IPPROTO_IPV6)
         return IPPROTO_IPV6;
 #endif
     return level;
 }
 
 static int guest_sockopt_optname_to_host(int level, int optname) {
-    if (level != GUEST_SOL_SOCKET)
+    if (level != guest_SOL_SOCKET)
         return optname;
     switch (optname) {
 #ifdef SO_DEBUG
-    case 1: return SO_DEBUG;
+    case guest_SO_DEBUG: return SO_DEBUG;
 #endif
 #ifdef SO_REUSEADDR
-    case 2: return SO_REUSEADDR;
+    case guest_SO_REUSEADDR: return SO_REUSEADDR;
 #endif
 #ifdef SO_TYPE
-    case 3: return SO_TYPE;
+    case guest_SO_TYPE: return SO_TYPE;
 #endif
 #ifdef SO_ERROR
-    case 4: return SO_ERROR;
+    case guest_SO_ERROR: return SO_ERROR;
 #endif
 #ifdef SO_DONTROUTE
-    case 5: return SO_DONTROUTE;
+    case guest_SO_DONTROUTE: return SO_DONTROUTE;
 #endif
 #ifdef SO_BROADCAST
-    case 6: return SO_BROADCAST;
+    case guest_SO_BROADCAST: return SO_BROADCAST;
 #endif
 #ifdef SO_SNDBUF
-    case 7: return SO_SNDBUF;
+    case guest_SO_SNDBUF: return SO_SNDBUF;
 #endif
 #ifdef SO_RCVBUF
-    case 8: return SO_RCVBUF;
+    case guest_SO_RCVBUF: return SO_RCVBUF;
 #endif
 #ifdef SO_KEEPALIVE
-    case 9: return SO_KEEPALIVE;
+    case guest_SO_KEEPALIVE: return SO_KEEPALIVE;
 #endif
 #ifdef SO_OOBINLINE
-    case 10: return SO_OOBINLINE;
+    case guest_SO_OOBINLINE: return SO_OOBINLINE;
 #endif
 #ifdef SO_LINGER
-    case 13: return SO_LINGER;
+    case guest_SO_LINGER: return SO_LINGER;
 #endif
 #ifdef SO_REUSEPORT
-    case 15: return SO_REUSEPORT;
+    case guest_SO_REUSEPORT: return SO_REUSEPORT;
 #endif
 #ifdef SO_RCVTIMEO
-    case 20: return SO_RCVTIMEO;
+    case guest_SO_RCVTIMEO: return SO_RCVTIMEO;
 #endif
 #ifdef SO_SNDTIMEO
-    case 21: return SO_SNDTIMEO;
+    case guest_SO_SNDTIMEO: return SO_SNDTIMEO;
 #endif
 #ifdef SO_ACCEPTCONN
-    case 30: return SO_ACCEPTCONN;
+    case guest_SO_ACCEPTCONN: return SO_ACCEPTCONN;
 #endif
     default:
         return optname;
@@ -1396,14 +1364,14 @@ static int guest_sockaddr_to_host(const uint8_t *guest, uint64_t guest_len,
     /* Write sa_family in host byte order. */
     {
         uint16_t hf = 0;
-        if (family == GUEST_AF_INET)
+        if (family == guest_AF_INET)
             hf = (uint16_t)AF_INET;
 #ifdef AF_INET6
-        else if (family == GUEST_AF_INET6)
+        else if (family == guest_AF_INET6)
             hf = (uint16_t)AF_INET6;
 #endif
 #ifdef AF_UNIX
-        else if (family == 1)
+        else if (family == guest_AF_UNIX)
             hf = (uint16_t)AF_UNIX;
 #endif
         else
@@ -1412,7 +1380,7 @@ static int guest_sockaddr_to_host(const uint8_t *guest, uint64_t guest_len,
     }
 
 #ifdef AF_INET6
-    if (family == GUEST_AF_INET6 && guest_len >= (uint64_t)sizeof(struct sockaddr_in6)) {
+    if (family == guest_AF_INET6 && guest_len >= (uint64_t)sizeof(struct sockaddr_in6)) {
         /* sin6_flowinfo and sin6_scope_id are uint32_t host-order fields. */
         struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)host;
         uint32_t flowinfo = (uint32_t)guest[4] | ((uint32_t)guest[5] << 8) |
@@ -1434,14 +1402,14 @@ static void host_sockaddr_to_guest(uint8_t *addr, uint64_t len) {
         return;
     memcpy(&hf, addr, sizeof(hf));
     if (hf == AF_INET)
-        gf = GUEST_AF_INET;
+        gf = guest_AF_INET;
 #ifdef AF_INET6
     else if (hf == AF_INET6)
-        gf = GUEST_AF_INET6;
+        gf = guest_AF_INET6;
 #endif
 #ifdef AF_UNIX
     else if (hf == AF_UNIX)
-        gf = 1;
+        gf = guest_AF_UNIX;
 #endif
     else
         gf = hf;
@@ -1449,7 +1417,7 @@ static void host_sockaddr_to_guest(uint8_t *addr, uint64_t len) {
     addr[1] = (uint8_t)((gf >> 8) & 0xff);
 
 #ifdef AF_INET6
-    if (gf == GUEST_AF_INET6 && len >= (uint64_t)sizeof(struct sockaddr_in6)) {
+    if (gf == guest_AF_INET6 && len >= (uint64_t)sizeof(struct sockaddr_in6)) {
         struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)addr;
         uint32_t flowinfo = in6->sin6_flowinfo;
         uint32_t scope_id = in6->sin6_scope_id;

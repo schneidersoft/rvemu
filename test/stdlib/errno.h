@@ -2,10 +2,11 @@
 #define _ERRNO_H
 
 /*
- * The Linux asm-generic error numbers live in <linux.h> (they are shared with
- * the raw syscall helpers); this header only adds the C library variable.
+ * The Linux asm-generic error numbers live in guest.h (shared with the
+ * raw syscall helpers and the host emulator); this header only adds the
+ * C library variable.
  */
-#include <linux.h>
+#include <guest.h>
 
 extern int errno;
 
