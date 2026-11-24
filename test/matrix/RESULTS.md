@@ -138,8 +138,9 @@ failure, and it does not gate the matrix.
 ## Artifacts
 > `out/` and `bin/` are gitignored — no build or run artifacts are committed.
 > The logs below are from the historical runs this document cites; reproduce
-> any of them with `test/matrix/run.sh` (podman image `rvemu-matrix:local`) or
-> via CI, where every run uploads `out/` as the `rvemu-logs` artifact
+> any of them in the `rvemu-matrix:local` container (see `Dockerfile`; run
+> `python3 test/matrix/matrix.py` with the repo bind-mounted at `/workspace`)
+> or via CI, where every run uploads `out/` as the `rvemu-logs` artifact
 > (retention 30 days).
 
 - Final all-green matrix log: `out/matrix-final.log`

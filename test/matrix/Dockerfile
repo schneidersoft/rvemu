@@ -1,5 +1,7 @@
 # Cross-compilation matrix image: ubuntu base + cross toolchains + qemu-user.
-# Rebuilt rarely; `run.sh` skips the build when this image already exists.
+# Build with `podman build -t rvemu-matrix:local -f test/matrix/Dockerfile .`
+# and run `python3 test/matrix/matrix.py` inside the container with the repo
+# bind-mounted at `/workspace`.
 #
 # The package list lives in test/matrix/packages.txt (single source of truth,
 # shared with .github/workflows/makefile.yml); comments/blank lines are
