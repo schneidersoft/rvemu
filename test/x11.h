@@ -4,6 +4,70 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Core protocol opcodes */
+enum {
+    X11_OP_CREATE_WINDOW = 1,
+    X11_OP_DESTROY_WINDOW = 4,
+    X11_OP_MAP_WINDOW = 8,
+    X11_OP_GET_GEOMETRY = 14,
+    X11_OP_INTERN_ATOM = 16,
+    X11_OP_CHANGE_PROPERTY = 18,
+    X11_OP_CREATE_PIXMAP = 53,
+    X11_OP_FREE_PIXMAP = 54,
+    X11_OP_CREATE_GC = 55,
+    X11_OP_CHANGE_GC = 56,
+    X11_OP_SET_CLIP_RECTANGLES = 59,
+    X11_OP_FREE_GC = 60,
+    X11_OP_COPY_AREA = 62,
+    X11_OP_POLY_FILL_RECTANGLE = 70,
+    X11_OP_POLY_FILL_ARC = 71,
+    X11_OP_POLY_TEXT8 = 74,
+};
+
+/* Event types (low 7 bits of ev[0]) */
+enum {
+    X11_EV_ERROR = 0,
+    X11_EV_REPLY = 1,
+    X11_EV_KEY_PRESS = 2,
+    X11_EV_KEY_RELEASE = 3,
+    X11_EV_BUTTON_PRESS = 4,
+    X11_EV_BUTTON_RELEASE = 5,
+    X11_EV_MOTION_NOTIFY = 6,
+    X11_EV_EXPOSE = 12,
+    X11_EV_CONFIGURE_NOTIFY = 22,
+    X11_EV_CLIENT_MESSAGE = 33,
+};
+
+/* Event masks */
+enum {
+    X11_MASK_KEY_PRESS = 0x00000001,
+    X11_MASK_KEY_RELEASE = 0x00000002,
+    X11_MASK_BUTTON_PRESS = 0x00000004,
+    X11_MASK_BUTTON_RELEASE = 0x00000008,
+    X11_MASK_POINTER_MOTION = 0x00000040,
+    X11_MASK_EXPOSURE = 0x00008000,
+    X11_MASK_STRUCTURE_NOTIFY = 0x00020000,
+};
+
+/* GC/value masks */
+enum {
+    X11_GC_FOREGROUND = 0x00000004,
+    X11_GC_CLIP_MASK = 0x00080000,
+};
+
+/* CreateWindow value masks */
+enum {
+    X11_CW_BACK_PIXEL = 0x00000002,
+    X11_CW_EVENT_MASK = 0x00000800,
+};
+
+/* Common atoms / property formats */
+enum {
+    X11_ATOM_WM_NAME = 39,
+    X11_ATOM_STRING = 31,
+    X11_ATOM_ATOM = 4,
+};
+
 typedef struct X11 {
     int fd;
     uint32_t root;

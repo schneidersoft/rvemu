@@ -56,9 +56,9 @@ int main(void) {
     uint32_t gc = x11_new_id(&x);
     uint32_t pix = x11_new_id(&x);
 
-    uint32_t evmask = 0x1 | 0x2 | 0x8000 | 0x20000; /* KeyPress|KeyRelease|Exposure|StructureNotify */
+    uint32_t evmask = X11_MASK_KEY_PRESS | X11_MASK_KEY_RELEASE | X11_MASK_EXPOSURE | X11_MASK_STRUCTURE_NOTIFY;
     if (x11_create_window(wid, x.root, 100, 100, W, H, 0xFF101018, evmask) < 0) return 1;
-    if (x11_create_gc(gc, wid, 0x4, x.white) < 0) return 1;
+    if (x11_create_gc(gc, wid, X11_GC_FOREGROUND, x.white) < 0) return 1;
     if (x11_create_pixmap(pix, wid, W, H, x.root_depth) < 0) pix = wid;
 
     x11_set_title(wid, "rvemu pong");
@@ -78,19 +78,19 @@ int main(void) {
         int pr;
         while ((pr = poll_event(ev)) == 1) {
             uint8_t type = ev[0] & 0x7f;
-            if (type == 2) {
+            if (type == X11_EV_KEY_PRESS) {
                 uint8_t kc = ev[1];
                 if (kc == 24 || kc == 9) goto quit;
                 if (kc == 25 || kc == 111) up = 1;
                 if (kc == 39 || kc == 116) down = 1;
-            } else if (type == 3) {
+            } else if (type == X11_EV_KEY_RELEASE) {
                 uint8_t kc = ev[1];
                 if (kc == 25 || kc == 111) up = 0;
                 if (kc == 39 || kc == 116) down = 0;
-            } else if (type == 12) {
+            } else if (type == X11_EV_EXPOSE) {
                 if (get_u16(ev + 16) == 0 && pix != wid)
                     x11_copy_area(pix, wid, gc, 0, 0, 0, 0, W, H);
-            } else if (type == 33) {
+            } else if (type == X11_EV_CLIENT_MESSAGE) {
                 goto quit;
             }
         }

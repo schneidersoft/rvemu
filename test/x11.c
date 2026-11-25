@@ -111,7 +111,7 @@ uint32_t x11_intern_atom_fd(int fd, const char *name) {
     size_t n = strlen(name), len = 2 + (n + pad4(n)) / 4;
     if (len * 4 > sizeof(req)) return 0;
     memset(req, 0, len * 4);
-    req[0] = 16;
+    req[0] = X11_OP_INTERN_ATOM;
     put_u16(req + 2, (uint16_t)len);
     put_u16(req + 4, (uint16_t)n);
     memcpy(req + 8, name, n);
@@ -125,7 +125,7 @@ uint32_t x11_intern_atom(const char *name) { return x11_intern_atom_fd(xfd, name
 int x11_change_property32(uint32_t win, uint32_t prop, uint32_t type, const uint32_t *vals, uint32_t nvals) {
     uint8_t hdr[24];
     memset(hdr, 0, sizeof(hdr));
-    hdr[0] = 18;
+    hdr[0] = X11_OP_CHANGE_PROPERTY;
     put_u16(hdr + 2, (uint16_t)(6 + nvals));
     put_u32(hdr + 4, win);
     put_u32(hdr + 8, prop);
@@ -144,7 +144,7 @@ int x11_change_property8(uint32_t win, uint32_t prop, uint32_t type, const char 
     uint8_t hdr[24];
     size_t len = 6 + (n + pad4(n)) / 4;
     memset(hdr, 0, sizeof(hdr));
-    hdr[0] = 18;
+    hdr[0] = X11_OP_CHANGE_PROPERTY;
     put_u16(hdr + 2, (uint16_t)len);
     put_u32(hdr + 4, win);
     put_u32(hdr + 8, prop);
@@ -157,24 +157,24 @@ int x11_change_property8(uint32_t win, uint32_t prop, uint32_t type, const char 
 
 int x11_set_title(uint32_t win, const char *title) {
     uint32_t utf8 = x11_intern_atom("UTF8_STRING");
-    uint32_t type = utf8 ? utf8 : 31; /* STRING */
-    return x11_change_property8(win, 39 /* WM_NAME */, type, title, (uint32_t)strlen(title));
+    uint32_t type = utf8 ? utf8 : X11_ATOM_STRING;
+    return x11_change_property8(win, X11_ATOM_WM_NAME, type, title, (uint32_t)strlen(title));
 }
 
 uint32_t x11_set_wm_delete_window(uint32_t win) {
     uint32_t wm_protocols = x11_intern_atom("WM_PROTOCOLS");
     uint32_t wm_delete = x11_intern_atom("WM_DELETE_WINDOW");
     if (wm_protocols && wm_delete)
-        x11_change_property32(win, wm_protocols, 4 /* ATOM */, &wm_delete, 1);
+        x11_change_property32(win, wm_protocols, X11_ATOM_ATOM, &wm_delete, 1);
     return wm_delete;
 }
 
 int x11_create_window(uint32_t wid, uint32_t parent, int16_t x, int16_t y,
                       uint16_t w, uint16_t h, uint32_t bg, uint32_t event_mask) {
     uint8_t req[40];
-    uint32_t mask = 0x2 /* background-pixel */ | 0x800 /* event-mask */;
+    uint32_t mask = X11_CW_BACK_PIXEL | X11_CW_EVENT_MASK;
     memset(req, 0, sizeof(req));
-    req[0] = 1; /* CreateWindow */
+    req[0] = X11_OP_CREATE_WINDOW;
     put_u16(req + 2, 10);
     put_u32(req + 4, wid);
     put_u32(req + 8, parent);
@@ -192,7 +192,7 @@ int x11_create_window(uint32_t wid, uint32_t parent, int16_t x, int16_t y,
 int x11_create_gc(uint32_t gc, uint32_t drawable, uint32_t value_mask, uint32_t fg) {
     uint8_t req[20];
     memset(req, 0, sizeof(req));
-    req[0] = 55; /* CreateGC */
+    req[0] = X11_OP_CREATE_GC;
     put_u16(req + 2, 5);
     put_u32(req + 4, gc);
     put_u32(req + 8, drawable);
@@ -204,7 +204,7 @@ int x11_create_gc(uint32_t gc, uint32_t drawable, uint32_t value_mask, uint32_t 
 int x11_create_pixmap(uint32_t pid, uint32_t drawable, uint16_t w, uint16_t h, uint8_t depth) {
     uint8_t req[16];
     memset(req, 0, sizeof(req));
-    req[0] = 53; /* CreatePixmap */
+    req[0] = X11_OP_CREATE_PIXMAP;
     req[1] = depth;
     put_u16(req + 2, 4);
     put_u32(req + 4, pid);
@@ -217,38 +217,38 @@ int x11_create_pixmap(uint32_t pid, uint32_t drawable, uint16_t w, uint16_t h, u
 int x11_free_pixmap(uint32_t pid) {
     uint8_t req[8];
     memset(req, 0, sizeof(req));
-    req[0] = 54; put_u16(req + 2, 2); put_u32(req + 4, pid);
+    req[0] = X11_OP_FREE_PIXMAP; put_u16(req + 2, 2); put_u32(req + 4, pid);
     return xwrite_all(req, 8);
 }
 
 int x11_free_gc(uint32_t gc) {
     uint8_t req[8];
     memset(req, 0, sizeof(req));
-    req[0] = 60; put_u16(req + 2, 2); put_u32(req + 4, gc);
+    req[0] = X11_OP_FREE_GC; put_u16(req + 2, 2); put_u32(req + 4, gc);
     return xwrite_all(req, 8);
 }
 
 int x11_destroy_window(uint32_t wid) {
     uint8_t req[8];
     memset(req, 0, sizeof(req));
-    req[0] = 4; put_u16(req + 2, 2); put_u32(req + 4, wid);
+    req[0] = X11_OP_DESTROY_WINDOW; put_u16(req + 2, 2); put_u32(req + 4, wid);
     return xwrite_all(req, 8);
 }
 
 int x11_map_window(uint32_t wid) {
     uint8_t req[8];
     memset(req, 0, sizeof(req));
-    req[0] = 8; put_u16(req + 2, 2); put_u32(req + 4, wid);
+    req[0] = X11_OP_MAP_WINDOW; put_u16(req + 2, 2); put_u32(req + 4, wid);
     return xwrite_all(req, 8);
 }
 
 int x11_change_gc_fg(uint32_t gc, uint32_t pixel) {
     uint8_t req[16];
     memset(req, 0, sizeof(req));
-    req[0] = 56;
+    req[0] = X11_OP_CHANGE_GC;
     put_u16(req + 2, 4);
     put_u32(req + 4, gc);
-    put_u32(req + 8, 0x0004);
+    put_u32(req + 8, X11_GC_FOREGROUND);
     put_u32(req + 12, pixel);
     return xwrite_all(req, 16);
 }
@@ -256,7 +256,7 @@ int x11_change_gc_fg(uint32_t gc, uint32_t pixel) {
 int x11_fill_rect(uint32_t d, uint32_t gc, int x, int y, int w, int h) {
     uint8_t req[20];
     memset(req, 0, sizeof(req));
-    req[0] = 70;
+    req[0] = X11_OP_POLY_FILL_RECTANGLE;
     put_u16(req + 2, 5);
     put_u32(req + 4, d);
     put_u32(req + 8, gc);
@@ -270,7 +270,7 @@ int x11_fill_rect(uint32_t d, uint32_t gc, int x, int y, int w, int h) {
 int x11_fill_arc(uint32_t d, uint32_t gc, int x, int y, int w, int h, int a1, int a2) {
     uint8_t req[24];
     memset(req, 0, sizeof(req));
-    req[0] = 71;
+    req[0] = X11_OP_POLY_FILL_ARC;
     put_u16(req + 2, 6);
     put_u32(req + 4, d);
     put_u32(req + 8, gc);
@@ -286,7 +286,7 @@ int x11_fill_arc(uint32_t d, uint32_t gc, int x, int y, int w, int h, int a1, in
 int x11_copy_area(uint32_t src, uint32_t dst, uint32_t gc, int sx, int sy, int dx, int dy, int w, int h) {
     uint8_t req[28];
     memset(req, 0, sizeof(req));
-    req[0] = 62;
+    req[0] = X11_OP_COPY_AREA;
     put_u16(req + 2, 7);
     put_u32(req + 4, src);
     put_u32(req + 8, dst);
@@ -305,7 +305,7 @@ int x11_text8(uint32_t d, uint32_t gc, int x, int y, const char *s) {
     size_t n = strlen(s);
     if (n > 254) n = 254;
     memset(hdr, 0, sizeof(hdr));
-    hdr[0] = 74;
+    hdr[0] = X11_OP_POLY_TEXT8;
     put_u16(hdr + 2, (uint16_t)(4 + ((2 + n + pad4(2 + n)) / 4)));
     put_u32(hdr + 4, d);
     put_u32(hdr + 8, gc);

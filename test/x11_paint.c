@@ -45,18 +45,18 @@ static int next_event(uint8_t ev[32]) {
 static int get_geometry(uint32_t d, int *x, int *y, int *w, int *h) {
     uint8_t req[8], ev[32];
     memset(req, 0, sizeof(req));
-    req[0] = 14; put_u16(req + 2, 2); put_u32(req + 4, d);
+    req[0] = X11_OP_GET_GEOMETRY; put_u16(req + 2, 2); put_u32(req + 4, d);
     if (xwrite_all(req, 8) < 0) return -1;
     for (;;) {
         if (xread_all(ev, 32) < 0) return -1;
-        if (ev[0] == 1) {
+        if (ev[0] == X11_EV_REPLY) {
             if (x) *x = (int16_t)get_u16(ev + 12);
             if (y) *y = (int16_t)get_u16(ev + 14);
             if (w) *w = get_u16(ev + 16);
             if (h) *h = get_u16(ev + 18);
             return 0;
         }
-        if (ev[0] == 0) return -1;
+        if (ev[0] == X11_EV_ERROR) return -1;
         if (!has_pending_ev) { memcpy(pending_ev, ev, 32); has_pending_ev = 1; }
     }
 }
@@ -64,7 +64,7 @@ static int get_geometry(uint32_t d, int *x, int *y, int *w, int *h) {
 static int gc_set_clip_canvas(void) {
     uint8_t req[20];
     memset(req, 0, sizeof(req));
-    req[0] = 59; req[1] = 0;
+    req[0] = X11_OP_SET_CLIP_RECTANGLES; req[1] = 0;
     put_u16(req + 2, 5);
     put_u32(req + 4, gc);
     put_u16(req + 8, 0); put_u16(req + 10, 0);
@@ -76,10 +76,10 @@ static int gc_set_clip_canvas(void) {
 static int gc_clear_clip(void) {
     uint8_t req[16];
     memset(req, 0, sizeof(req));
-    req[0] = 56; put_u16(req + 2, 4);
+    req[0] = X11_OP_CHANGE_GC; put_u16(req + 2, 4);
     put_u32(req + 4, gc);
-    put_u32(req + 8, 0x80000); /* clip-mask None */
-    put_u32(req + 12, 0);
+    put_u32(req + 8, X11_GC_CLIP_MASK);
+    put_u32(req + 12, 0); /* None */
     return xwrite_all(req, 16);
 }
 
@@ -201,9 +201,10 @@ int main(void) {
     gc = x11_new_id(&xdisp);
     pix = x11_new_id(&xdisp);
 
-    uint32_t evmask = 0x1 | 0x4 | 0x8 | 0x40 | 0x8000 | 0x20000; /* KeyPress|ButtonPress|ButtonRelease|PointerMotion|Exposure|StructureNotify */
+    uint32_t evmask = X11_MASK_KEY_PRESS | X11_MASK_BUTTON_PRESS | X11_MASK_BUTTON_RELEASE |
+                      X11_MASK_POINTER_MOTION | X11_MASK_EXPOSURE | X11_MASK_STRUCTURE_NOTIFY;
     if (x11_create_window(wid, xdisp.root, 60, 60, (uint16_t)win_w, (uint16_t)win_h, 0xFF1E1E2E, evmask) < 0) return 1;
-    if (x11_create_gc(gc, wid, 0x4, xdisp.white) < 0) return 1;
+    if (x11_create_gc(gc, wid, X11_GC_FOREGROUND, xdisp.white) < 0) return 1;
     if (x11_create_pixmap(pix, wid, (uint16_t)win_w, (uint16_t)win_h, xdisp.root_depth) < 0) pix = 0;
 
     x11_set_title(wid, "rvemu paint");
@@ -221,12 +222,12 @@ int main(void) {
         uint8_t ev[32];
         if (next_event(ev) < 0) break;
         uint8_t type = ev[0] & 0x7f;
-        if (ev[0] == 0) continue;
-        if (type == 12) {
+        if (type == X11_EV_ERROR) continue;
+        if (type == X11_EV_EXPOSE) {
             if (get_u16(ev + 16) == 0 && pix) x11_copy_area(pix, wid, gc, 0, 0, 0, 0, win_w, win_h);
-        } else if (type == 22) {
+        } else if (type == X11_EV_CONFIGURE_NOTIFY) {
             apply_resize((int)get_u16(ev + 16), (int)get_u16(ev + 18));
-        } else if (type == 4) {
+        } else if (type == X11_EV_BUTTON_PRESS) {
             uint32_t btn = ev[1]; int16_t x = (int16_t)get_u16(ev + 24), y = (int16_t)get_u16(ev + 26);
             if (btn == 1 && y >= BAR_H) {
                 drawing = 1; last_x = x; last_y = y; gc_set_clip_canvas(); draw_brush(x, y, cur_brush);
@@ -240,12 +241,12 @@ int main(void) {
                 else if (!handled && x >= 290 && x < 318 && y >= 8 && y < 36) { if (cur_brush > 1) { cur_brush--; draw_ui(); } }
                 else if (!handled && x >= 350 && x < 378 && y >= 8 && y < 36) { if (cur_brush < 40) { cur_brush++; draw_ui(); } }
             }
-        } else if (type == 5) {
+        } else if (type == X11_EV_BUTTON_RELEASE) {
             if (ev[1] == 1) drawing = 0;
-        } else if (type == 6) {
+        } else if (type == X11_EV_MOTION_NOTIFY) {
             int16_t x = (int16_t)get_u16(ev + 24), y = (int16_t)get_u16(ev + 26);
             if (drawing) { if (y < BAR_H) y = BAR_H; gc_set_clip_canvas(); draw_line_brush(last_x, last_y, x, y, cur_brush); last_x = x; last_y = y; }
-        } else if (type == 2) {
+        } else if (type == X11_EV_KEY_PRESS) {
             uint8_t kc = ev[1];
             if (kc == 24 || kc == 9) break;
             if (kc == 54) { int gx, gy, gw, gh; if (get_geometry(wid, &gx, &gy, &gw, &gh) == 0) apply_resize(gw, gh); clear_canvas(); }
@@ -253,7 +254,7 @@ int main(void) {
             if (kc == 26) { cur_eraser = !cur_eraser; draw_ui(); }
             if (kc == 34 && cur_brush > 1) { cur_brush--; draw_ui(); }
             if (kc == 35 && cur_brush < 40) { cur_brush++; draw_ui(); }
-        } else if (type == 33) {
+        } else if (type == X11_EV_CLIENT_MESSAGE) {
             if (wm_delete && get_u32(ev + 12) == wm_delete) break;
         }
     }
