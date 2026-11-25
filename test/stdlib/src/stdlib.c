@@ -183,3 +183,119 @@ int unlink(const char *path) {
 int getpid(void) { return (int)linux_getpid(); }
 
 int getuid(void) { return (int)linux_getuid(); }
+
+typedef struct malloc_block {
+    size_t size;
+    int free;
+    struct malloc_block *next;
+} malloc_block;
+
+static malloc_block *malloc_head;
+
+static size_t malloc_align(size_t size) {
+    const size_t align = sizeof(long);
+    return (size + align - 1) & ~(align - 1);
+}
+
+static malloc_block *malloc_find(size_t size) {
+    malloc_block *block = malloc_head;
+    while (block != NULL) {
+        if (block->free && block->size >= size) {
+            return block;
+        }
+        block = block->next;
+    }
+    return NULL;
+}
+
+static malloc_block *malloc_grow(size_t size) {
+    malloc_block *block = (malloc_block *)linux_brk(0);
+    void *request = (char *)block + sizeof(malloc_block) + size;
+    if ((long)request <= 0) {
+        return NULL;
+    }
+    if (linux_brk(request) != (long)request) {
+        return NULL;
+    }
+    block->size = size;
+    block->free = 0;
+    block->next = NULL;
+    return block;
+}
+
+void *malloc(size_t size) {
+    malloc_block *block;
+    size_t aligned;
+
+    if (size == 0) {
+        size = 1;
+    }
+    aligned = malloc_align(size);
+    block = malloc_find(aligned);
+    if (block != NULL) {
+        block->free = 0;
+        return (char *)block + sizeof(malloc_block);
+    }
+
+    block = malloc_grow(aligned);
+    if (block == NULL) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    if (malloc_head == NULL) {
+        malloc_head = block;
+    } else {
+        malloc_block *tail = malloc_head;
+        while (tail->next != NULL) {
+            tail = tail->next;
+        }
+        tail->next = block;
+    }
+    return (char *)block + sizeof(malloc_block);
+}
+
+void free(void *ptr) {
+    malloc_block *block;
+    if (ptr == NULL) {
+        return;
+    }
+    block = (malloc_block *)((char *)ptr - sizeof(malloc_block));
+    block->free = 1;
+}
+
+void *calloc(size_t count, size_t size) {
+    size_t total = count * size;
+    void *ptr;
+    if (count != 0 && total / count != size) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    ptr = malloc(total);
+    if (ptr != NULL) {
+        memset(ptr, 0, total);
+    }
+    return ptr;
+}
+
+void *realloc(void *ptr, size_t size) {
+    malloc_block *block;
+    void *next;
+    if (ptr == NULL) {
+        return malloc(size);
+    }
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
+    block = (malloc_block *)((char *)ptr - sizeof(malloc_block));
+    if (block->size >= malloc_align(size)) {
+        return ptr;
+    }
+    next = malloc(size);
+    if (next == NULL) {
+        return NULL;
+    }
+    memcpy(next, ptr, block->size);
+    free(ptr);
+    return next;
+}

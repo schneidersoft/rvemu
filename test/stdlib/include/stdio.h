@@ -3,8 +3,21 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <sys/types.h>
 
 typedef struct __stdio_file FILE;
+
+typedef ssize_t cookie_read_function_t(void *cookie, char *buf, size_t size);
+typedef ssize_t cookie_write_function_t(void *cookie, const char *buf, size_t size);
+typedef int cookie_seek_function_t(void *cookie, off_t *offset, int whence);
+typedef int cookie_close_function_t(void *cookie);
+
+typedef struct {
+    cookie_read_function_t *read;
+    cookie_write_function_t *write;
+    cookie_seek_function_t *seek;
+    cookie_close_function_t *close;
+} cookie_io_functions_t;
 
 #ifndef EOF
 #define EOF (-1)
@@ -44,6 +57,23 @@ int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);
 int fileno(FILE *stream);
+int fclose(FILE *stream);
+int fseek(FILE *stream, long offset, int whence);
+long ftell(FILE *stream);
+
+FILE *fmemopen(void *buf, size_t size, const char *mode);
+FILE *open_memstream(char **ptr, size_t *sizeloc);
+FILE *fopencookie(void *cookie, const char *mode, cookie_io_functions_t io_funcs);
+
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#endif
+#ifndef SEEK_CUR
+#define SEEK_CUR 1
+#endif
+#ifndef SEEK_END
+#define SEEK_END 2
+#endif
 
 /* Platform hooks. Return the number of bytes transferred, or -1 on error. */
 long _read(int fd, void *buffer, size_t length);

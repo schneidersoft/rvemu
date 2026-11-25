@@ -5,6 +5,10 @@
 
 void exit(int status);
 int atoi(const char *string);
+void *malloc(size_t size);
+void *calloc(size_t count, size_t size);
+void *realloc(void *ptr, size_t size);
+void free(void *ptr);
 
 /* Diagnostics are declared here because the stream header is printf-only. */
 void perror(const char *string);

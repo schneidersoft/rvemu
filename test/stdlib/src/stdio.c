@@ -35,6 +35,18 @@
 
 #include <float.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#endif
+#ifndef SEEK_CUR
+#define SEEK_CUR 1
+#endif
+#ifndef SEEK_END
+#define SEEK_END 2
+#endif
 
 // conversion buffer sizes
 enum {
@@ -768,10 +780,20 @@ enum {
     STREAM_UNBUFFERED = 1 << 3,
     STREAM_EOF = 1 << 4,
     STREAM_ERROR = 1 << 5,
+    STREAM_OWNED = 1 << 6,
+    STREAM_APPEND = 1 << 7,
+};
+
+enum {
+    STREAM_KIND_FD = 0,
+    STREAM_KIND_COOKIE = 1,
+    STREAM_KIND_MEM = 2,
+    STREAM_KIND_MEMSTREAM = 3,
 };
 
 struct __stdio_file {
     int fd;
+    int kind;
     unsigned int flags;
     size_t read_pos;
     size_t read_len;
@@ -779,15 +801,260 @@ struct __stdio_file {
     int pushback;
     char read_buffer[STREAM_BUFFER_SIZE];
     char write_buffer[STREAM_BUFFER_SIZE];
+
+    void *cookie;
+    cookie_read_function_t *cookie_read;
+    cookie_write_function_t *cookie_write;
+    cookie_seek_function_t *cookie_seek;
+    cookie_close_function_t *cookie_close;
+
+    /* fmemopen */
+    char *mem_buf;
+    size_t mem_size;
+    size_t mem_pos;
+    size_t mem_capacity;
+    int mem_allocated;
+
+    /* open_memstream */
+    char **ms_ptr;
+    size_t *ms_sizeloc;
 };
 
-static struct __stdio_file stdin_file = {0, STREAM_READABLE, 0, 0, 0, -1, {0}, {0}};
-static struct __stdio_file stdout_file = {1, STREAM_WRITABLE | STREAM_LINE_BUFFERED, 0, 0, 0, -1, {0}, {0}};
-static struct __stdio_file stderr_file = {2, STREAM_WRITABLE | STREAM_UNBUFFERED, 0, 0, 0, -1, {0}, {0}};
+static struct __stdio_file stdin_file  = {0, STREAM_KIND_FD, STREAM_READABLE, 0, 0, 0, -1, {0}, {0}, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL};
+static struct __stdio_file stdout_file = {1, STREAM_KIND_FD, STREAM_WRITABLE | STREAM_LINE_BUFFERED, 0, 0, 0, -1, {0}, {0}, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL};
+static struct __stdio_file stderr_file = {2, STREAM_KIND_FD, STREAM_WRITABLE | STREAM_UNBUFFERED, 0, 0, 0, -1, {0}, {0}, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL};
 
 FILE *stdin = &stdin_file;
 FILE *stdout = &stdout_file;
 FILE *stderr = &stderr_file;
+
+static ssize_t fd_cookie_read(void *cookie, char *buf, size_t size) {
+    long result = _read((int)(intptr_t)cookie, buf, size);
+    if (result < 0) {
+        return -1;
+    }
+    return (ssize_t)result;
+}
+
+static ssize_t fd_cookie_write(void *cookie, const char *buf, size_t size) {
+    long result = _write((int)(intptr_t)cookie, (const void *)buf, size);
+    if (result < 0) {
+        return -1;
+    }
+    return (ssize_t)result;
+}
+
+static int stream_ensure_memstream(FILE *stream, size_t needed) {
+    size_t cap;
+    char *next;
+    if (stream == NULL || stream->kind != STREAM_KIND_MEMSTREAM) {
+        return -1;
+    }
+    if (needed <= stream->mem_capacity) {
+        return 0;
+    }
+    cap = stream->mem_capacity ? stream->mem_capacity : 1;
+    while (cap < needed) {
+        if (cap > (size_t)-1 / 2) {
+            cap = needed;
+            break;
+        }
+        cap *= 2;
+    }
+    next = (char *)realloc(stream->mem_buf, cap);
+    if (next == NULL) {
+        return -1;
+    }
+    if (cap > stream->mem_capacity) {
+        memset(next + stream->mem_capacity, 0, cap - stream->mem_capacity);
+    }
+    stream->mem_buf = next;
+    stream->mem_capacity = cap;
+    if (stream->ms_ptr != NULL) {
+        *stream->ms_ptr = stream->mem_buf;
+    }
+    return 0;
+}
+
+static int stream_memstream_update(FILE *stream) {
+    size_t len;
+    if (stream == NULL || stream->kind != STREAM_KIND_MEMSTREAM) {
+        return -1;
+    }
+    len = stream->mem_size;
+    if (stream->mem_pos > len) {
+        len = stream->mem_pos;
+    }
+    if (stream_ensure_memstream(stream, len + 1) < 0) {
+        return -1;
+    }
+    if (stream->mem_pos > stream->mem_size) {
+        memset(stream->mem_buf + stream->mem_size, 0, stream->mem_pos - stream->mem_size);
+    }
+    stream->mem_size = len;
+    stream->mem_buf[stream->mem_size] = '\0';
+    if (stream->ms_ptr != NULL) {
+        *stream->ms_ptr = stream->mem_buf;
+    }
+    if (stream->ms_sizeloc != NULL) {
+        *stream->ms_sizeloc = stream->mem_size;
+    }
+    return 0;
+}
+
+static ssize_t mem_cookie_read(void *cookie, char *buf, size_t size) {
+    FILE *stream = (FILE *)cookie;
+    size_t available;
+    if (stream->mem_pos >= stream->mem_size) {
+        return 0;
+    }
+    available = stream->mem_size - stream->mem_pos;
+    if (size > available) {
+        size = available;
+    }
+    memcpy(buf, stream->mem_buf + stream->mem_pos, size);
+    stream->mem_pos += size;
+    return (ssize_t)size;
+}
+
+static ssize_t mem_cookie_write(void *cookie, const char *buf, size_t size) {
+    FILE *stream = (FILE *)cookie;
+    size_t pos;
+    size_t needed;
+    if (stream->kind == STREAM_KIND_MEM) {
+        if (!(stream->flags & STREAM_WRITABLE)) {
+            return -1;
+        }
+        pos = (stream->flags & STREAM_APPEND) ? stream->mem_size : stream->mem_pos;
+        if (pos >= stream->mem_capacity) {
+            return 0;
+        }
+        if (size > stream->mem_capacity - pos) {
+            size = stream->mem_capacity - pos;
+        }
+        if (size > 0) {
+            memcpy(stream->mem_buf + pos, buf, size);
+            pos += size;
+            stream->mem_pos = pos;
+            if (stream->mem_pos > stream->mem_size) {
+                stream->mem_size = stream->mem_pos;
+            }
+            if (stream->mem_size < stream->mem_capacity) {
+                stream->mem_buf[stream->mem_size] = '\0';
+            }
+        }
+        return (ssize_t)size;
+    }
+
+    /* memstream */
+    pos = stream->mem_pos;
+    needed = pos + size + 1;
+    if (needed < pos) {
+        return -1;
+    }
+    if (stream_ensure_memstream(stream, needed) < 0) {
+        return -1;
+    }
+    if (pos > stream->mem_size) {
+        memset(stream->mem_buf + stream->mem_size, 0, pos - stream->mem_size);
+        stream->mem_size = pos;
+    }
+    if (size > 0) {
+        memcpy(stream->mem_buf + pos, buf, size);
+        stream->mem_pos = pos + size;
+        if (stream->mem_pos > stream->mem_size) {
+            stream->mem_size = stream->mem_pos;
+        }
+    }
+    if (stream_memstream_update(stream) < 0) {
+        return -1;
+    }
+    return (ssize_t)size;
+}
+
+static int mem_cookie_seek(void *cookie, off_t *offset, int whence) {
+    FILE *stream = (FILE *)cookie;
+    long base;
+    long next;
+    size_t limit = (stream->kind == STREAM_KIND_MEM) ? stream->mem_capacity : stream->mem_size;
+    if (whence == SEEK_SET) {
+        base = 0;
+    } else if (whence == SEEK_CUR) {
+        base = (long)stream->mem_pos;
+    } else if (whence == SEEK_END) {
+        base = (long)stream->mem_size;
+    } else {
+        return -1;
+    }
+    next = base + (long)*offset;
+    if (next < 0 || (unsigned long)next > (unsigned long)limit) {
+        return -1;
+    }
+    stream->mem_pos = (size_t)next;
+    *offset = (off_t)stream->mem_pos;
+    return 0;
+}
+
+static int mem_cookie_close(void *cookie) {
+    FILE *stream = (FILE *)cookie;
+    if (stream->kind == STREAM_KIND_MEMSTREAM) {
+        (void)stream_memstream_update(stream);
+        return 0;
+    }
+    if (stream->kind == STREAM_KIND_MEM && stream->mem_allocated) {
+        free(stream->mem_buf);
+        stream->mem_buf = NULL;
+    }
+    return 0;
+}
+
+static ssize_t stream_do_read(FILE *stream, char *buf, size_t size) {
+    if (stream == NULL) {
+        return -1;
+    }
+    if (stream->kind == STREAM_KIND_FD) {
+        return fd_cookie_read((void *)(intptr_t)stream->fd, buf, size);
+    }
+    if (stream->kind == STREAM_KIND_COOKIE) {
+        if (stream->cookie_read == NULL) {
+            return -1;
+        }
+        return stream->cookie_read(stream->cookie, buf, size);
+    }
+    return mem_cookie_read(stream, buf, size);
+}
+
+static ssize_t stream_do_write(FILE *stream, const char *buf, size_t size) {
+    if (stream == NULL) {
+        return -1;
+    }
+    if (stream->kind == STREAM_KIND_FD) {
+        return fd_cookie_write((void *)(intptr_t)stream->fd, buf, size);
+    }
+    if (stream->kind == STREAM_KIND_COOKIE) {
+        if (stream->cookie_write == NULL) {
+            return -1;
+        }
+        return stream->cookie_write(stream->cookie, buf, size);
+    }
+    return mem_cookie_write(stream, buf, size);
+}
+
+static int stream_do_seek(FILE *stream, off_t *offset, int whence) {
+    if (stream == NULL) {
+        return -1;
+    }
+    if (stream->kind == STREAM_KIND_FD) {
+        return -1;
+    }
+    if (stream->kind == STREAM_KIND_COOKIE) {
+        if (stream->cookie_seek == NULL) {
+            return -1;
+        }
+        return stream->cookie_seek(stream->cookie, offset, whence);
+    }
+    return mem_cookie_seek(stream, offset, whence);
+}
 
 static int _flush_stream(FILE *stream) {
     if (stream == NULL || !(stream->flags & STREAM_WRITABLE)) {
@@ -796,7 +1063,7 @@ static int _flush_stream(FILE *stream) {
 
     size_t offset = 0;
     while (offset < stream->write_len) {
-        long written = _write(stream->fd, stream->write_buffer + offset, stream->write_len - offset);
+        ssize_t written = stream_do_write(stream, stream->write_buffer + offset, stream->write_len - offset);
         if (written <= 0) {
             stream->flags |= STREAM_ERROR;
             return EOF;
@@ -804,6 +1071,12 @@ static int _flush_stream(FILE *stream) {
         offset += (size_t)written;
     }
     stream->write_len = 0;
+    if (stream->kind == STREAM_KIND_MEMSTREAM) {
+        if (stream_memstream_update(stream) < 0) {
+            stream->flags |= STREAM_ERROR;
+            return EOF;
+        }
+    }
     return 0;
 }
 
@@ -828,7 +1101,8 @@ int fputc(int character, FILE *stream) {
 
     unsigned char byte = (unsigned char)character;
     if (stream->flags & STREAM_UNBUFFERED) {
-        if (_write(stream->fd, &byte, 1) != 1) {
+        ssize_t written = stream_do_write(stream, (const char *)&byte, 1);
+        if (written != 1) {
             stream->flags |= STREAM_ERROR;
             return EOF;
         }
@@ -898,7 +1172,7 @@ int fgetc(FILE *stream) {
     }
 
     if (stream->read_pos == stream->read_len) {
-        long received = _read(stream->fd, stream->read_buffer, STREAM_BUFFER_SIZE);
+        ssize_t received = stream_do_read(stream, stream->read_buffer, STREAM_BUFFER_SIZE);
         if (received == 0) {
             stream->flags |= STREAM_EOF;
             return EOF;
@@ -977,7 +1251,215 @@ void clearerr(FILE *stream) {
     }
 }
 
-int fileno(FILE *stream) { return stream != NULL ? stream->fd : -1; }
+int fileno(FILE *stream) { return (stream != NULL && stream->kind == STREAM_KIND_FD) ? stream->fd : -1; }
+
+int fclose(FILE *stream) {
+    int result = 0;
+    if (stream == NULL) {
+        return EOF;
+    }
+    if (_flush_stream(stream) == EOF) {
+        result = EOF;
+    }
+    if (stream->kind == STREAM_KIND_COOKIE) {
+        if (stream->cookie_close != NULL && stream->cookie_close(stream->cookie) != 0) {
+            result = EOF;
+        }
+    } else if (stream->kind == STREAM_KIND_MEM || stream->kind == STREAM_KIND_MEMSTREAM) {
+        if (mem_cookie_close(stream) != 0) {
+            result = EOF;
+        }
+    }
+    if (stream->flags & STREAM_OWNED) {
+        free(stream);
+    }
+    return result;
+}
+
+int fseek(FILE *stream, long offset, int whence) {
+    off_t off;
+    if (stream == NULL) {
+        return -1;
+    }
+    if (_flush_stream(stream) == EOF) {
+        return -1;
+    }
+    stream->read_pos = 0;
+    stream->read_len = 0;
+    stream->pushback = -1;
+    stream->flags &= ~STREAM_EOF;
+    off = (off_t)offset;
+    if (stream_do_seek(stream, &off, whence) < 0) {
+        stream->flags |= STREAM_ERROR;
+        return -1;
+    }
+    return 0;
+}
+
+long ftell(FILE *stream) {
+    off_t off = 0;
+    if (stream == NULL) {
+        return -1L;
+    }
+    if (_flush_stream(stream) == EOF) {
+        return -1L;
+    }
+    if (stream->kind == STREAM_KIND_MEM || stream->kind == STREAM_KIND_MEMSTREAM) {
+        long pos = (long)stream->mem_pos - (stream->pushback >= 0 ? 1 : 0) - (long)(stream->read_len - stream->read_pos);
+        return pos;
+    }
+    if (stream_do_seek(stream, &off, SEEK_CUR) < 0) {
+        return -1L;
+    }
+    return (long)off - (stream->pushback >= 0 ? 1 : 0) - (long)(stream->read_len - stream->read_pos);
+}
+
+static unsigned int stream_mode_flags(const char *mode, int *ok) {
+    unsigned int flags = 0;
+    *ok = 0;
+    if (mode == NULL || mode[0] == '\0') {
+        return 0;
+    }
+    switch (mode[0]) {
+    case 'r':
+        flags = STREAM_READABLE;
+        break;
+    case 'w':
+        flags = STREAM_WRITABLE;
+        break;
+    case 'a':
+        flags = STREAM_WRITABLE | STREAM_APPEND;
+        break;
+    default:
+        return 0;
+    }
+    for (const char *p = mode + 1; *p != '\0'; ++p) {
+        if (*p == '+') {
+            flags |= STREAM_READABLE | STREAM_WRITABLE;
+        } else if (*p == 'b' || *p == 'x') {
+            /* ignored */
+        } else {
+            return 0;
+        }
+    }
+    *ok = 1;
+    return flags;
+}
+
+FILE *fopencookie(void *cookie, const char *mode, cookie_io_functions_t io_funcs) {
+    int ok = 0;
+    unsigned int flags = stream_mode_flags(mode, &ok);
+    FILE *stream;
+    if (!ok) {
+        return NULL;
+    }
+    stream = (FILE *)calloc(1, sizeof(FILE));
+    if (stream == NULL) {
+        return NULL;
+    }
+    stream->fd = -1;
+    stream->kind = STREAM_KIND_COOKIE;
+    stream->flags = flags | STREAM_OWNED;
+    stream->pushback = -1;
+    stream->cookie = cookie;
+    stream->cookie_read = io_funcs.read;
+    stream->cookie_write = io_funcs.write;
+    stream->cookie_seek = io_funcs.seek;
+    stream->cookie_close = io_funcs.close;
+    return stream;
+}
+
+FILE *fmemopen(void *buf, size_t size, const char *mode) {
+    int ok = 0;
+    unsigned int flags = stream_mode_flags(mode, &ok);
+    FILE *stream;
+    char *buffer = (char *)buf;
+    int allocated = 0;
+    size_t initial_size = 0;
+    size_t initial_pos = 0;
+
+    if (!ok || size == 0) {
+        return NULL;
+    }
+    if (buffer == NULL) {
+        buffer = (char *)malloc(size);
+        if (buffer == NULL) {
+            return NULL;
+        }
+        memset(buffer, 0, size);
+        allocated = 1;
+    }
+
+    if (mode[0] == 'r') {
+        initial_size = size;
+        initial_pos = 0;
+    } else if (mode[0] == 'w') {
+        initial_size = 0;
+        initial_pos = 0;
+        buffer[0] = '\0';
+    } else { /* a */
+        size_t n = 0;
+        while (n < size && buffer[n] != '\0') {
+            n++;
+        }
+        initial_size = n;
+        initial_pos = n;
+    }
+
+    stream = (FILE *)calloc(1, sizeof(FILE));
+    if (stream == NULL) {
+        if (allocated) {
+            free(buffer);
+        }
+        return NULL;
+    }
+    stream->fd = -1;
+    stream->kind = STREAM_KIND_MEM;
+    stream->flags = flags | STREAM_OWNED;
+    stream->pushback = -1;
+    stream->cookie = stream;
+    stream->mem_buf = buffer;
+    stream->mem_size = initial_size;
+    stream->mem_pos = initial_pos;
+    stream->mem_capacity = size;
+    stream->mem_allocated = allocated;
+    if ((flags & STREAM_WRITABLE) && stream->mem_size < stream->mem_capacity) {
+        stream->mem_buf[stream->mem_size] = '\0';
+    }
+    return stream;
+}
+
+FILE *open_memstream(char **ptr, size_t *sizeloc) {
+    FILE *stream;
+    char *buf;
+    if (ptr == NULL || sizeloc == NULL) {
+        return NULL;
+    }
+    buf = (char *)malloc(1);
+    if (buf == NULL) {
+        return NULL;
+    }
+    buf[0] = '\0';
+    stream = (FILE *)calloc(1, sizeof(FILE));
+    if (stream == NULL) {
+        free(buf);
+        return NULL;
+    }
+    stream->fd = -1;
+    stream->kind = STREAM_KIND_MEMSTREAM;
+    stream->flags = STREAM_WRITABLE | STREAM_OWNED;
+    stream->pushback = -1;
+    stream->cookie = stream;
+    stream->mem_buf = buf;
+    stream->mem_size = 0;
+    stream->mem_pos = 0;
+    stream->mem_capacity = 1;
+    stream->ms_ptr = ptr;
+    stream->ms_sizeloc = sizeloc;
+    *ptr = buf;
+    *sizeloc = 0;
+    return stream;
+}
 
 // internal FILE output sink
 static inline void _out_file(char character, void *buffer, size_t idx, size_t maxlen) {

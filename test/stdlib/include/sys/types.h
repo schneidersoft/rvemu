@@ -8,4 +8,9 @@
 typedef long ssize_t;
 #endif
 
+#ifndef _OFF_T
+#define _OFF_T
+typedef long off_t;
+#endif
+
 #endif
