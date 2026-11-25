@@ -23,6 +23,36 @@ static void check(const char *name, int condition) {
     }
 }
 
+struct cookie_buf {
+    const char *data;
+    size_t pos;
+    size_t len;
+};
+
+static ssize_t cookie_read(void *cookie, char *buf, size_t size) {
+    struct cookie_buf *c = (struct cookie_buf *)cookie;
+    size_t n = c->len - c->pos;
+    if (n > size) {
+        n = size;
+    }
+    if (n > 0) {
+        memcpy(buf, c->data + c->pos, n);
+        c->pos += n;
+    }
+    return (ssize_t)n;
+}
+
+static ssize_t cookie_write(void *cookie, const char *buf, size_t size) {
+    (void)cookie;
+    (void)buf;
+    return (ssize_t)size;
+}
+
+static int cookie_close(void *cookie) {
+    (void)cookie;
+    return 0;
+}
+
 int main(void) {
     printf("STARTING SYSCALL TESTS\n");
 
@@ -104,6 +134,62 @@ int main(void) {
         memory[0] = 7;
         memory[4095] = 9;
         check("mmap writable", memory[0] == 7 && memory[4095] == 9);
+    }
+
+    // In-memory stdio streams.
+    {
+        char mem[64] = "hello";
+        char out[64] = {0};
+        FILE *f = fmemopen(mem, sizeof(mem), "r+");
+        check("fmemopen open", f != NULL);
+        if (f != NULL) {
+            check("fmemopen read", fread(out, 1, 5, f) == 5 && memcmp(out, "hello", 5) == 0);
+            check("fmemopen seek", fseek(f, 0, SEEK_SET) == 0);
+            check("fmemopen write", fprintf(f, "world") == 5);
+            check("fmemopen fflush", fflush(f) == 0);
+            check("fmemopen content", memcmp(mem, "world", 5) == 0);
+            check("fmemopen close", fclose(f) == 0);
+        }
+
+        FILE *f2 = fmemopen(NULL, 32, "w+");
+        check("fmemopen alloc open", f2 != NULL);
+        if (f2 != NULL) {
+            check("fmemopen alloc write", fputs("abc", f2) >= 0);
+            check("fmemopen alloc seek", fseek(f2, 0, SEEK_SET) == 0);
+            memset(out, 0, sizeof(out));
+            check("fmemopen alloc read", fgets(out, sizeof(out), f2) != NULL && strcmp(out, "abc") == 0);
+            check("fmemopen alloc close", fclose(f2) == 0);
+        }
+    }
+
+    {
+        char *buf = NULL;
+        size_t size = 0;
+        FILE *f = open_memstream(&buf, &size);
+        check("open_memstream open", f != NULL && buf != NULL);
+        if (f != NULL) {
+            check("open_memstream write", fprintf(f, "hello %d", 42) == 8);
+            check("open_memstream fflush", fflush(f) == 0);
+            check("open_memstream size", size == 8);
+            check("open_memstream content", strcmp(buf, "hello 42") == 0);
+            check("open_memstream ftell", ftell(f) == 8);
+            check("open_memstream close", fclose(f) == 0);
+            check("open_memstream final", size == 8 && strcmp(buf, "hello 42") == 0);
+            free(buf);
+        }
+    }
+
+    {
+        struct cookie_buf cb = {"abc", 0, 3};
+        cookie_io_functions_t io = {cookie_read, cookie_write, NULL, cookie_close};
+        char out[8] = {0};
+        FILE *f = fopencookie(&cb, "r", io);
+        check("fopencookie open", f != NULL);
+        if (f != NULL) {
+            check("fopencookie read", fread(out, 1, 3, f) == 3 && memcmp(out, "abc", 3) == 0);
+            check("fopencookie eof", fgetc(f) == EOF && feof(f) != 0);
+            check("fopencookie close", fclose(f) == 0);
+        }
     }
 
     // Unsupported and invalid calls report Linux-style errors.
