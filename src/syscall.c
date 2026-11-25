@@ -24,7 +24,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#define NAMESPACE guest
 #include "guest.h"
 
 enum {

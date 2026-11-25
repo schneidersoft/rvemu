@@ -6,13 +6,13 @@
 #include "librv64i.h"
 
 /* Linux RISC-V (asm-generic) syscall numbers. */
-#ifndef NAMESPACE
-#define NAMESPACE guest
+#ifndef GUEST
+#define GUEST guest
 #define _GUEST_H_DEFINED_NAMESPACE
 #endif
 #include "guest.h"
 #ifdef _GUEST_H_DEFINED_NAMESPACE
-#undef NAMESPACE
+#undef GUEST
 #undef _GUEST_H_DEFINED_NAMESPACE
 #endif
 enum {
