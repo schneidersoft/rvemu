@@ -1,8 +1,16 @@
-#include "linux.h"
-
+#include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+/* Platform-specific syscall probes (uname, clock_gettime, getrandom, brk,
+ * mmap, raw syscall, invalid pointer) that have no portable stdlib wrapper
+ * in this minimal guest libc. */
+#include "linux.h"
 
 static int failures;
 
@@ -34,33 +42,33 @@ int main(void) {
     char empty[1];
     check("fgets size 1", fgets(empty, 1, stdin) == empty && empty[0] == '\0');
 
-    // File I/O is forwarded to the host filesystem.
+    // File I/O through the portable stdlib/unistd interface.
     // CWD-relative on purpose: the harness runs the emulator from the repo
     // root (and the matrix container from any directory), so no subdir
     // assumption is allowed here.
     const char *path = "syscall-test.tmp";
     const char content[] = "hello from riscv\n";
     const long content_length = (long)(sizeof(content) - 1);
-    long fd = linux_openat(AT_FDCWD, path, O_CREAT | O_TRUNC | O_RDWR, 0644);
-    check("openat", fd >= 0);
+    int fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0644);
+    check("open", fd >= 0);
     if (fd >= 0) {
-        check("write", linux_write((int)fd, content, (unsigned long)content_length) == content_length);
-        check("lseek", linux_lseek((int)fd, 0, SEEK_SET) == 0);
+        check("write", write(fd, content, (size_t)content_length) == content_length);
+        check("lseek", lseek(fd, 0, SEEK_SET) == 0);
 
         char buffer[sizeof(content)] = {0};
-        long received = linux_read((int)fd, buffer, sizeof(buffer) - 1);
+        ssize_t received = read(fd, buffer, sizeof(buffer) - 1);
         check("read", received == content_length && memcmp(buffer, content, (size_t)content_length) == 0);
 
-        struct linux_stat file_stat;
-        check("fstat", linux_fstat((int)fd, &file_stat) == 0 && file_stat.st_size == content_length);
-        check("close", linux_close((int)fd) == 0);
+        check("lseek end", lseek(fd, 0, SEEK_END) == content_length);
+        check("close", close(fd) == 0);
     }
-    check("unlinkat", linux_unlinkat(AT_FDCWD, path, 0) == 0);
-    check("open missing", linux_openat(AT_FDCWD, path, O_RDONLY, 0) == -ENOENT);
+    check("unlink", unlink(path) == 0);
+    errno = 0;
+    check("open missing", open(path, O_RDONLY, 0) == -1 && errno == ENOENT);
 
     // Process and system information.
-    check("getpid", linux_getpid() > 0);
-    check("getuid", linux_getuid() >= 0);
+    check("getpid", getpid() > 0);
+    check("getuid", getuid() >= 0);
 
     struct linux_utsname name;
     check("uname", linux_uname(&name) == 0 && name.sysname[0] != 0);
@@ -68,8 +76,8 @@ int main(void) {
     struct linux_timespec timespec;
     check("clock_gettime", linux_clock_gettime(CLOCK_REALTIME, &timespec) == 0 && timespec.tv_sec > 0);
 
-    struct linux_timeval timeval;
-    check("gettimeofday", linux_gettimeofday(&timeval) == 0 && timeval.tv_sec > 0);
+    struct timeval timeval_value;
+    check("gettimeofday", gettimeofday(&timeval_value, 0) == 0 && timeval_value.tv_sec > 0);
 
     uint8_t random[16];
     check("getrandom", linux_getrandom(random, sizeof(random), 0) == (long)sizeof(random));
@@ -100,10 +108,10 @@ int main(void) {
 
     // Unsupported and invalid calls report Linux-style errors.
     check("unknown syscall", linux_syscall(9999, 0, 0, 0, 0, 0, 0) == -ENOSYS);
-    check("invalid pointer", linux_write(1, (void *)(uintptr_t)0x7fffffff, 1) == -EFAULT);
+    check("invalid pointer", write(1, (void *)(uintptr_t)0x7fffffff, 1) == -1 && errno == EFAULT);
 
     printf("SYSCALL TESTS: %d failure(s)\n", failures);
     fflush(NULL);
-    linux_exit_group(failures ? 1 : 0);
+    exit(failures ? 1 : 0);
     return 0;
 }

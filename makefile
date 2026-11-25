@@ -1,13 +1,13 @@
 TESTSRC=
 TESTSRC+=test/test.c test/sha256.c test/aes.c test/dbg.c
 
-GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c
-SYSCALLTEST=test/startup.rv64i.s test/linux.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
+GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/assert.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c
+SYSCALLTEST=test/startup.rv64i.s test/linux.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c
 # Negative control: a guest that executes an illegal (reserved CUSTOM-0)
 # instruction; a correct emulator must trap it and exit non-zero.
 TRAPTEST=test/startup.rv64i.s test/trap.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
 
-NETTEST=test/net.c test/startup.rv64i.s test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/net.c
+NETTEST=test/net.c test/startup.rv64i.s test/dbg.c test/assert.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/net.c
 NETHEADERS=test/stdlib/src/linux.h test/stdlib/include/stdio.h test/stdlib/include/string.h test/stdlib/include/stdlib.h test/stdlib/include/errno.h test/stdlib/include/netdb.h test/stdlib/include/unistd.h test/stdlib/include/time.h test/stdlib/include/sys/time.h test/stdlib/include/sys/socket.h test/stdlib/include/sys/types.h
 
 .PHONY: all test net clean

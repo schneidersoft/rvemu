@@ -5,6 +5,8 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,6 +139,40 @@ ssize_t write(int fd, const void *buffer, size_t length) {
 
 int close(int fd) {
     long result = linux_close(fd);
+    if (result < 0) {
+        errno = -(int)result;
+        return -1;
+    }
+    return 0;
+}
+
+long lseek(int fd, long offset, int whence) {
+    long result = linux_lseek(fd, offset, whence);
+    if (result < 0) {
+        errno = -(int)result;
+        return -1;
+    }
+    return result;
+}
+
+int open(const char *path, int flags, ...) {
+    int mode = 0;
+    if (flags & O_CREAT) {
+        va_list args;
+        va_start(args, flags);
+        mode = va_arg(args, int);
+        va_end(args);
+    }
+    long result = linux_openat(AT_FDCWD, path, flags, mode);
+    if (result < 0) {
+        errno = -(int)result;
+        return -1;
+    }
+    return (int)result;
+}
+
+int unlink(const char *path) {
+    long result = linux_unlinkat(AT_FDCWD, path, 0);
     if (result < 0) {
         errno = -(int)result;
         return -1;
