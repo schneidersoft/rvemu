@@ -34,7 +34,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent   # <root>/test/matrix -> repo root
 
-SRC = "src/librv64i.c src/riscv64i.c src/syscall.c test/dbg.c"
+SRC = "src/librv64i.c src/riscv64i.c src/syscall.c src/gdbstub.c test/dbg.c"
 COMMON = "-O2 -static -Wall -Werror -Itest -Isrc"
 GUESTS = ["rtest.bin", "stest.bin", "ttest.bin", "net.bin"]
 RUN_TIMEOUT = 90

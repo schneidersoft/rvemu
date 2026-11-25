@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <signal.h>
@@ -262,7 +263,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
     }
     case 'm': {
         uint64_t addr = 0, len = 0;
-        if (sscanf(buf + 1, "%lx,%lx", &addr, &len) != 2) { send_packet(g, "E01"); return 0; }
+        if (sscanf(buf + 1, "%" SCNx64 ",%" SCNx64, &addr, &len) != 2) { send_packet(g, "E01"); return 0; }
         if (len > 1024) len = 1024;
         char out[2049];
         uint8_t tmp[1024];
@@ -276,7 +277,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
     case 'M': {
         uint64_t addr = 0, len = 0;
         const char *colon = strchr(buf, ':');
-        if (!colon || sscanf(buf + 1, "%lx,%lx", &addr, &len) != 2) { send_packet(g, "E01"); return 0; }
+        if (!colon || sscanf(buf + 1, "%" SCNx64 ",%" SCNx64, &addr, &len) != 2) { send_packet(g, "E01"); return 0; }
         const char *hex = colon + 1;
         if (strlen(hex) < len * 2) { send_packet(g, "E01"); return 0; }
         for (uint64_t i = 0; i < len; i++) {
@@ -306,7 +307,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
     case 'Z':
         if (buf[1] == '0') {
             uint64_t addr = 0;
-            sscanf(buf + 2, ",%lx", &addr);
+            sscanf(buf + 2, ",%" SCNx64, &addr);
             if (add_breakpoint(g, addr) < 0) send_packet(g, "E22");
             else send_packet(g, "OK");
         } else {
@@ -316,7 +317,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
     case 'z':
         if (buf[1] == '0') {
             uint64_t addr = 0;
-            sscanf(buf + 2, ",%lx", &addr);
+            sscanf(buf + 2, ",%" SCNx64, &addr);
             remove_breakpoint(g, addr);
             send_packet(g, "OK");
         } else {
