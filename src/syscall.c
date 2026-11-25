@@ -500,55 +500,55 @@ static int rv_store_u64(cpu_t *cpu, uint64_t address, uint64_t value) {
  * Interpret the guest bits against the asm-generic layout, then re-emit them
  * with the host's own O_* constants. O_ACCMODE (0/1/2) is portable across the
  * arches in the host matrix and passes through unchanged. */
-static int rv_open_to_host_flags(int RV_flags) {
-    int host_flags = RV_flags & RV_O_ACCMODE;
+static int rv_open_to_host_flags(int rv_flags) {
+    int host_flags = rv_flags & RV_O_ACCMODE;
 #ifdef O_CREAT
-    if (RV_flags & RV_O_CREAT) {
+    if (rv_flags & RV_O_CREAT) {
         host_flags |= O_CREAT;
     }
 #endif
 #ifdef O_EXCL
-    if (RV_flags & RV_O_EXCL) {
+    if (rv_flags & RV_O_EXCL) {
         host_flags |= O_EXCL;
     }
 #endif
 #ifdef O_NOCTTY
-    if (RV_flags & RV_O_NOCTTY) {
+    if (rv_flags & RV_O_NOCTTY) {
         host_flags |= O_NOCTTY;
     }
 #endif
 #ifdef O_TRUNC
-    if (RV_flags & RV_O_TRUNC) {
+    if (rv_flags & RV_O_TRUNC) {
         host_flags |= O_TRUNC;
     }
 #endif
 #ifdef O_APPEND
-    if (RV_flags & RV_O_APPEND) {
+    if (rv_flags & RV_O_APPEND) {
         host_flags |= O_APPEND;
     }
 #endif
 #ifdef O_NONBLOCK
-    if (RV_flags & RV_O_NONBLOCK) {
+    if (rv_flags & RV_O_NONBLOCK) {
         host_flags |= O_NONBLOCK;
     }
 #endif
 #ifdef O_DSYNC
-    if (RV_flags & RV_O_DSYNC) {
+    if (rv_flags & RV_O_DSYNC) {
         host_flags |= O_DSYNC;
     }
 #endif
 #ifdef O_DIRECT
-    if (RV_flags & RV_O_DIRECT) {
+    if (rv_flags & RV_O_DIRECT) {
         host_flags |= O_DIRECT;
     }
 #endif
 #ifdef O_NOFOLLOW
-    if (RV_flags & RV_O_NOFOLLOW) {
+    if (rv_flags & RV_O_NOFOLLOW) {
         host_flags |= O_NOFOLLOW;
     }
 #endif
 #ifdef O_CLOEXEC
-    if (RV_flags & RV_O_CLOEXEC) {
+    if (rv_flags & RV_O_CLOEXEC) {
         host_flags |= O_CLOEXEC;
     }
 #endif
