@@ -127,6 +127,7 @@ enum {
     _GUEST(PROT_READ)           = 1,
     _GUEST(PROT_WRITE)          = 2,
     _GUEST(MAP_PRIVATE)         = 2,
+    _GUEST(MAP_FIXED)           = 0x10,
     _GUEST(MAP_ANONYMOUS)       = 0x20,
     _GUEST(CLOCK_REALTIME)      = 0,
 };
