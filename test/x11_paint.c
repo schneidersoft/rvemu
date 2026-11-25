@@ -226,7 +226,7 @@ int main(void) {
         if (type == X11_EV_EXPOSE) {
             if (get_u16(ev + 16) == 0 && pix) x11_copy_area(pix, wid, gc, 0, 0, 0, 0, win_w, win_h);
         } else if (type == X11_EV_CONFIGURE_NOTIFY) {
-            apply_resize((int)get_u16(ev + 16), (int)get_u16(ev + 18));
+            apply_resize((int)get_u16(ev + 20), (int)get_u16(ev + 22));
         } else if (type == X11_EV_BUTTON_PRESS) {
             uint32_t btn = ev[1]; int16_t x = (int16_t)get_u16(ev + 24), y = (int16_t)get_u16(ev + 26);
             if (btn == 1 && y >= BAR_H) {

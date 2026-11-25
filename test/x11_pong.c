@@ -91,8 +91,8 @@ int main(void) {
                 if (get_u16(ev + 16) == 0 && pix != wid)
                     x11_copy_area(pix, wid, gc, 0, 0, 0, 0, win_w, win_h);
             } else if (type == X11_EV_CONFIGURE_NOTIFY) {
-                int nw = (int)get_u16(ev + 16);
-                int nh = (int)get_u16(ev + 18);
+                int nw = (int)get_u16(ev + 20);
+                int nh = (int)get_u16(ev + 22);
                 if (nw > 0 && nh > 0 && (nw != win_w || nh != win_h)) {
                     uint32_t newpix = x11_new_id(&x);
                     if (x11_create_pixmap(newpix, wid, (uint16_t)nw, (uint16_t)nh, x.root_depth) >= 0) {
