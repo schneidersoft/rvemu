@@ -34,8 +34,8 @@ test: bin/riscv64i bin/rtest.bin bin/htest.elf bin/stest.bin bin/ttest.bin
 	     echo "OK: ttest illegal instruction trapped with non-zero exit"; \
 	   fi
 
-bin/riscv64i: bin/riscv64i.o bin/librv64i.a bin/syscall.o bin/dbg.o
-	gcc -Wall -Werror -I./test/ bin/riscv64i.o bin/librv64i.a bin/syscall.o bin/dbg.o -o $@
+bin/riscv64i: bin/riscv64i.o bin/librv64i.a bin/syscall.o bin/dbg.o bin/gdbstub.o
+	gcc -Wall -Werror -I./test/ bin/riscv64i.o bin/librv64i.a bin/syscall.o bin/dbg.o bin/gdbstub.o -o $@
 
 bin/librv64i.a: bin/librv64i.o
 	ar rcs $@ $<
@@ -44,7 +44,11 @@ bin/librv64i.o: src/librv64i.c src/librv64i.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/riscv64i.o: src/riscv64i.c src/librv64i.h src/syscall.h
+bin/riscv64i.o: src/riscv64i.c src/librv64i.h src/syscall.h src/gdbstub.h
+	@mkdir -p bin
+	gcc -Wall -Werror -I./test/ $< -c -o $@
+
+bin/gdbstub.o: src/gdbstub.c src/gdbstub.h src/librv64i.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 

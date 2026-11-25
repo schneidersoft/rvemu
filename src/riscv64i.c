@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "dbg.h"
+#include "gdbstub.h"
 #include "librv64i.h"
 #include "syscall.h"
 
@@ -96,8 +97,22 @@ static int invop_cb(cpu_t *cpu, uint32_t inst) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "usage: %s <binary>\n", argv[0]);
+    const char *bin = NULL;
+    int gdb_port = -1;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-g") == 0 && i + 1 < argc) {
+            gdb_port = atoi(argv[++i]);
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "unknown option: %s\n", argv[i]);
+            return 1;
+        } else {
+            bin = argv[i];
+        }
+    }
+
+    if (!bin) {
+        fprintf(stderr, "usage: %s [-g port] <binary>\n", argv[0]);
         return 1;
     }
 
@@ -107,7 +122,7 @@ int main(int argc, char **argv) {
     cpu.invop_cb = invop_cb;
 
     // Read input file
-    uint64_t image_size = read_file(&cpu, argv[1]);
+    uint64_t image_size = read_file(&cpu, bin);
     if (image_size < 0) {
         DBG("LOAD FILE FAILED");
         return 1;
@@ -119,25 +134,63 @@ int main(int argc, char **argv) {
     sys.syscalls[RV_SYS_exit] = app_exit;
     sys.syscalls[RV_SYS_exit_group] = app_exit;
 
-    // cpu loop
-    do {
-        uint32_t inst = cpu_fetch(&cpu);
+    gdbstub_t gdb;
+    memset(&gdb, 0, sizeof(gdb));
+    gdb.listen_fd = -1;
+    gdb.conn_fd = -1;
+    if (gdb_port >= 0) {
+        if (gdbstub_init(&gdb, gdb_port) < 0) {
+            fprintf(stderr, "failed to init gdbstub on port %d\n", gdb_port);
+            return 1;
+        }
+        if (gdbstub_wait(&gdb) < 0) {
+            fprintf(stderr, "failed to accept gdb connection\n");
+            gdbstub_close(&gdb);
+            return 1;
+        }
+    }
 
-        if (cpu_execute(&cpu, inst)) {
-            // A graceful exit (exit syscall or ebreak) sets `guest_exited` via
-            // end_guest(). If the core reports an error but the guest never
-            // exited, it is a core-level failure (e.g. an illegal instruction
-            // that must be trapped) — report it and fail the run instead of
-            // exiting with the guest's never-set status (a silent pass).
+    uint64_t skip_bp = 0;
+    int skip_bp_active = 0;
+    for (;;) {
+        if (gdb.enabled && gdb.attached) {
+            int gr = gdbstub_tick(&gdb, &cpu);
+            if (gr == -2) { gdbstub_close(&gdb); return 1; }
+            if (gdb.attached && !gdb.halt && !gdb.step && gdbstub_has_breakpoint(&gdb, cpu.pc)) {
+                if (skip_bp_active && skip_bp == cpu.pc) {
+                    skip_bp_active = 0;
+                } else {
+                    gr = gdbstub_stop(&gdb, &cpu, 5);
+                    if (gr == -2) { gdbstub_close(&gdb); return 1; }
+                    if (!gdb.step) { skip_bp = cpu.pc; skip_bp_active = 1; }
+                }
+            } else if (skip_bp_active && skip_bp != cpu.pc) {
+                skip_bp_active = 0;
+            }
+        }
+
+        int was_step = (gdb.enabled && gdb.attached && gdb.step && !gdb.halt);
+        uint32_t inst = cpu_fetch(&cpu);
+        int ex = cpu_execute(&cpu, inst);
+
+        if (ex) {
+            if (gdb.enabled && gdb.attached)
+                gdbstub_notify_exit(&gdb, guest_exit_code);
             if (!guest_exited) {
                 DBG("execute error: guest did not exit");
+                if (gdb.enabled) gdbstub_close(&gdb);
                 return 1;
             }
             break;
         }
 
-    } while (1);
+        if (was_step && gdb.enabled && gdb.attached) {
+            gdb.step = 0;
+            int gr = gdbstub_stop(&gdb, &cpu, 5);
+            if (gr == -2) { gdbstub_close(&gdb); return 1; }
+        }
+    }
 
-    // The guest terminated itself; surface its exit status.
+    if (gdb.enabled) gdbstub_close(&gdb);
     return guest_exit_code;
 }
