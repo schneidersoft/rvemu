@@ -3,7 +3,7 @@
 #
 # SINGLE SOURCE OF TRUTH — consumed by:
 #   test/matrix/Dockerfile           apt-get install --no-install-recommends
-#   .github/workflows/makefile.yml   sudo apt-get install
+#   .github/workflows/makefile.yml   builds that Dockerfile (cached layers)
 # Comments and blank lines are filtered by the consumers:
 #     $(grep -vE '^[[:space:]]*(#|$)' test/matrix/packages.txt)
 #
@@ -20,6 +20,7 @@
 # N/A [no <gcc>] instead of failing the matrix.
 ca-certificates
 gcc
+make
 binutils-mipsel-linux-gnu
 gcc-mipsel-linux-gnu
 binutils-mips-linux-gnu

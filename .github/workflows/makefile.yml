@@ -15,58 +15,58 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Guest toolchain + the exact cross/gcc + qemu-user set the portability
-    # matrix uses (test/matrix/Dockerfile). One shared list:
-    # test/matrix/packages.txt (single source of truth).
-    #
-    # Pinned to ubuntu-24.04 because it ships every cross gcc in the list,
-    # including mips/mipsel, which newer Ubuntu releases (26.04) have dropped.
-    # Defense-in-depth for any runner distro: install only the packages that
-    # distro actually provides and warn about the rest; matrix.py reports an
-    # arch as N/A (not a failure) when its gcc is absent.
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        INSTALLED=""
-        SKIPPED=""
-        for p in $(grep -vE '^[[:space:]]*(#|$)' test/matrix/packages.txt); do
-          if apt-cache policy "$p" 2>/dev/null | awk '/Candidate:/{print $2; exit}' | grep -qE '[0-9]'; then
-            INSTALLED="$INSTALLED $p"
-          else
-            SKIPPED="$SKIPPED $p"
-          fi
-        done
-        if [ -n "$SKIPPED" ]; then
-          echo "::warning::packages not available on this runner, skipped:$SKIPPED"
-        fi
-        sudo apt-get install -y $INSTALLED
+    # The toolchain image is the slow part of the job. Build it through
+    # BuildKit with the Actions cache so the apt layer is restored on later
+    # runs; the Dockerfile COPYs only test/matrix/packages.txt before that
+    # layer, so source-only changes are cache hits. `load: true` puts the
+    # image in the runner's local Docker daemon — nothing is pushed to a
+    # registry.
+    - uses: docker/setup-buildx-action@v3
 
-    # Build the emulator and every guest binary without running anything.
+    - name: Build toolchain container (cached)
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: test/matrix/Dockerfile
+        tags: rvemu-matrix:ci
+        load: true
+        cache-from: type=gha,scope=rvemu-matrix
+        cache-to: type=gha,mode=max,scope=rvemu-matrix
+
+    # Every build/test step runs in that container with the workspace
+    # bind-mounted, so bin/ and out/ land back on the host for upload-artifact.
+    # The image is based on ubuntu:24.04, which has every cross gcc in the
+    # shared list (including mips/mipsel); matrix.py still reports N/A for any
+    # toolchain that is unavailable.
     - name: Build (emulator + guest binaries)
-      run: make bin/riscv64i bin/htest.elf bin/rtest.bin bin/stest.bin bin/ttest.bin bin/net.bin
+      run: |
+        docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace rvemu-matrix:ci \
+          make bin/riscv64i bin/htest.elf bin/rtest.bin bin/stest.bin bin/ttest.bin bin/net.bin
 
     # Mandatory gates (host build, native run).
     - name: Run mandatory test suite
       run: |
-        ./bin/htest.elf
-        ./bin/riscv64i bin/rtest.bin
-        ./bin/riscv64i bin/stest.bin
-        # Negative control: the ttest guest executes an illegal instruction,
-        # so the emulator must trap it and exit NON-ZERO. A zero exit would
-        # mean the core silently kept running — that is a bug, fail it.
-        if ./bin/riscv64i bin/ttest.bin; then
-          echo "::error::ttest — emulator ran past an illegal instruction"
-          exit 1
-        fi
-        echo "OK: ttest illegal instruction trapped with non-zero exit"
+        docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace rvemu-matrix:ci \
+          bash -c 'set -e
+            ./bin/htest.elf
+            ./bin/riscv64i bin/rtest.bin
+            ./bin/riscv64i bin/stest.bin
+            # Negative control: the ttest guest executes an illegal instruction,
+            # so the emulator must trap it and exit NON-ZERO. A zero exit would
+            # mean the core silently kept running — that is a bug, fail it.
+            if ./bin/riscv64i bin/ttest.bin; then
+              echo "::error::ttest — emulator ran past an illegal instruction"
+              exit 1
+            fi
+            echo "OK: ttest illegal instruction trapped with non-zero exit"'
 
     # Best-effort: hermetic — test/net/net.py serves test/net/ on
     # 127.0.0.1:8931 in-process (no external network, no DNS) and runs the
-    # emulator against it. Still requires python3 on the runner and must
-    # not gate CI.
+    # emulator against it. Must not gate CI.
     - name: Run net guest (best effort)
       run: |
-        if python3 test/net/net.py ./bin/riscv64i bin/net.bin; then
+        if docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace rvemu-matrix:ci \
+             python3 test/net/net.py ./bin/riscv64i bin/net.bin; then
           echo "net guest: PASS"
         else
           echo "::warning::net guest failed (best effort only; not gating CI)"
@@ -77,7 +77,9 @@ jobs:
     # net = best-effort, both mirrored in test/matrix/matrix.py).
     # Exits non-zero only when a mandatory gate fails on a runnable arch.
     - name: QEMU cross-arch portability matrix
-      run: python3 test/matrix/matrix.py
+      run: |
+        docker run --rm -v "$GITHUB_WORKSPACE:/workspace" -w /workspace rvemu-matrix:ci \
+          python3 test/matrix/matrix.py
 
     - name: Upload logs
       uses: actions/upload-artifact@v4
