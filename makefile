@@ -1,7 +1,7 @@
 TESTSRC=
 TESTSRC+=test/test.c test/sha256.c test/aes.c test/dbg.c
 
-GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
+GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c
 SYSCALLTEST=test/startup.rv64i.s test/linux.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
 # Negative control: a guest that executes an illegal (reserved CUSTOM-0)
 # instruction; a correct emulator must trap it and exit non-zero.
