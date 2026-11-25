@@ -1,14 +1,14 @@
 TESTSRC=
 TESTSRC+=test/test.c test/sha256.c test/aes.c test/dbg.c
 
-GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
-SYSCALLTEST=test/startup.rv64i.s test/linux.c test/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
+GUESTTEST=test/startup.rv64i.s test/test.c test/sha256.c test/aes.c test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
+SYSCALLTEST=test/startup.rv64i.s test/linux.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
 # Negative control: a guest that executes an illegal (reserved CUSTOM-0)
 # instruction; a correct emulator must trap it and exit non-zero.
-TRAPTEST=test/startup.rv64i.s test/trap.c test/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
+TRAPTEST=test/startup.rv64i.s test/trap.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c
 
-NETTEST=test/net.c test/startup.rv64i.s test/dbg.c test/sim.c test/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/net.c
-NETHEADERS=test/stdlib/internal/linux.h test/stdlib/include/stdio.h test/stdlib/include/string.h test/stdlib/include/stdlib.h test/stdlib/include/errno.h test/stdlib/include/netdb.h test/stdlib/include/unistd.h test/stdlib/include/time.h test/stdlib/include/sys/time.h test/stdlib/include/sys/socket.h test/stdlib/include/sys/types.h
+NETTEST=test/net.c test/startup.rv64i.s test/dbg.c test/sim.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/net.c
+NETHEADERS=test/stdlib/src/linux.h test/stdlib/include/stdio.h test/stdlib/include/string.h test/stdlib/include/stdlib.h test/stdlib/include/errno.h test/stdlib/include/netdb.h test/stdlib/include/unistd.h test/stdlib/include/time.h test/stdlib/include/sys/time.h test/stdlib/include/sys/socket.h test/stdlib/include/sys/types.h
 
 .PHONY: all test net clean
 
@@ -56,21 +56,21 @@ bin/dbg.o: test/dbg.c test/dbg.h
 	@mkdir -p bin
 	gcc -Wall -Werror -I./test/ $< -c -o $@
 
-bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/stdlib/internal/linux.h src/guest.h test/stdlib/include/stdio.h
+bin/rtest.bin: $(GUESTTEST) test/riscv.ld test/stdlib/src/linux.h src/guest.h test/stdlib/include/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/internal -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(GUESTTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/rtest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(GUESTTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/rtest.elf bin/rtest.bin
 	riscv64-unknown-elf-objdump -d bin/rtest.elf > bin/rtest.elf.disas
 
-bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/stdlib/internal/linux.h src/guest.h test/stdlib/include/stdio.h
+bin/stest.bin: $(SYSCALLTEST) test/riscv.ld test/stdlib/src/linux.h src/guest.h test/stdlib/include/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/stest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/internal -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(SYSCALLTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/stest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(SYSCALLTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/stest.elf bin/stest.bin
 	riscv64-unknown-elf-objdump -d bin/stest.elf > bin/stest.elf.disas
 
 bin/ttest.bin: $(TRAPTEST) test/riscv.ld test/stdlib/include/stdio.h
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/ttest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/internal -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(TRAPTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/ttest.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(TRAPTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/ttest.elf bin/ttest.bin
 	riscv64-unknown-elf-objdump -d bin/ttest.elf > bin/ttest.elf.disas
 
@@ -80,7 +80,7 @@ bin/htest.elf: $(TESTSRC)
 
 bin/net.bin: $(NETTEST) $(NETHEADERS) src/guest.h test/riscv.ld
 	@mkdir -p bin
-	riscv64-unknown-elf-gcc -o bin/net.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/internal -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(NETTEST) -lgcc
+	riscv64-unknown-elf-gcc -o bin/net.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(NETTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/net.elf bin/net.bin
 	riscv64-unknown-elf-objdump -d bin/net.elf > bin/net.elf.disas
 

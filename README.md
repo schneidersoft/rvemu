@@ -23,7 +23,7 @@ linked against the system C library.
 descriptors 0, 1, and 2. `stdout` is line-buffered and `stderr` is unbuffered.
 `fprintf`, `fputc`, `fputs`, `fwrite`, `fflush`, `fgetc`, `fgets`, and `fread`
 operate on them. Ports provide the low-level `_read()` and `_write()` hooks;
-`test/platform.c` implements these with Linux syscalls for the guest tests.
+`test/stdlib/src/platform.c` implements these with Linux syscalls for the guest tests.
 
 The same directory also provides `string.h`, `stdlib.h` (`exit`, `atoi`,
 `perror`, `strerror`), `unistd.h`, `time.h`/`sys/time.h`, and a small BSD socket
