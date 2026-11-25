@@ -19,12 +19,12 @@
 #include <time.h>
 #include <unistd.h>
 
-#define W 640
-#define H 400
 #define PAD_W 12
 #define PAD_H 80
 #define BALL 10
 
+static int win_w = 640;
+static int win_h = 400;
 static uint8_t evbuf[32];
 static int evbuf_len = 0;
 
@@ -57,16 +57,16 @@ int main(void) {
     uint32_t pix = x11_new_id(&x);
 
     uint32_t evmask = X11_MASK_KEY_PRESS | X11_MASK_KEY_RELEASE | X11_MASK_EXPOSURE | X11_MASK_STRUCTURE_NOTIFY;
-    if (x11_create_window(wid, x.root, 100, 100, W, H, 0xFF101018, evmask) < 0) return 1;
+    if (x11_create_window(wid, x.root, 100, 100, (uint16_t)win_w, (uint16_t)win_h, 0xFF101018, evmask) < 0) return 1;
     if (x11_create_gc(gc, wid, X11_GC_FOREGROUND, x.white) < 0) return 1;
-    if (x11_create_pixmap(pix, wid, W, H, x.root_depth) < 0) pix = wid;
+    if (x11_create_pixmap(pix, wid, (uint16_t)win_w, (uint16_t)win_h, x.root_depth) < 0) pix = wid;
 
     x11_set_title(wid, "rvemu pong");
     x11_map_window(wid);
     fcntl(xfd, F_SETFL, O_NONBLOCK);
 
-    int py = H / 2 - PAD_H / 2, ay = H / 2 - PAD_H / 2;
-    int bx = W / 2, by = H / 2, vx = 3, vy = 2;
+    int py = win_h / 2 - PAD_H / 2, ay = win_h / 2 - PAD_H / 2;
+    int bx = win_w / 2, by = win_h / 2, vx = 3, vy = 2;
     int pscore = 0, ascore = 0;
     int up = 0, down = 0;
 
@@ -89,7 +89,26 @@ int main(void) {
                 if (kc == 39 || kc == 116) down = 0;
             } else if (type == X11_EV_EXPOSE) {
                 if (get_u16(ev + 16) == 0 && pix != wid)
-                    x11_copy_area(pix, wid, gc, 0, 0, 0, 0, W, H);
+                    x11_copy_area(pix, wid, gc, 0, 0, 0, 0, win_w, win_h);
+            } else if (type == X11_EV_CONFIGURE_NOTIFY) {
+                int nw = (int)get_u16(ev + 16);
+                int nh = (int)get_u16(ev + 18);
+                if (nw > 0 && nh > 0 && (nw != win_w || nh != win_h)) {
+                    uint32_t newpix = x11_new_id(&x);
+                    if (x11_create_pixmap(newpix, wid, (uint16_t)nw, (uint16_t)nh, x.root_depth) >= 0) {
+                        if (pix != wid) x11_free_pixmap(pix);
+                        pix = newpix;
+                    }
+                    win_w = nw; win_h = nh;
+                    if (py > win_h - PAD_H) py = win_h - PAD_H;
+                    if (ay > win_h - PAD_H) ay = win_h - PAD_H;
+                    if (py < 0) py = 0;
+                    if (ay < 0) ay = 0;
+                    if (bx > win_w - BALL) bx = win_w - BALL;
+                    if (by > win_h - BALL) by = win_h - BALL;
+                    if (bx < 0) bx = 0;
+                    if (by < 0) by = 0;
+                }
             } else if (type == X11_EV_CLIENT_MESSAGE) {
                 goto quit;
             }
@@ -98,31 +117,31 @@ int main(void) {
 
         if (up) py -= 5;
         if (down) py += 5;
-        py = clampi(py, 0, H - PAD_H);
+        py = clampi(py, 0, win_h - PAD_H);
         int ac = ay + PAD_H / 2;
         if (ac < by - 10) ay += 3;
         else if (ac > by + 10) ay -= 3;
-        ay = clampi(ay, 0, H - PAD_H);
+        ay = clampi(ay, 0, win_h - PAD_H);
 
         bx += vx; by += vy;
         if (by <= 0) { by = 0; vy = -vy; }
-        if (by >= H - BALL) { by = H - BALL; vy = -vy; }
+        if (by >= win_h - BALL) { by = win_h - BALL; vy = -vy; }
         if (bx <= 20 + PAD_W && bx >= 20 && by + BALL >= py && by <= py + PAD_H) { bx = 20 + PAD_W; vx = -vx; if (vx < 12) vx++; }
-        if (bx + BALL >= W - 20 - PAD_W && bx + BALL <= W - 20 && by + BALL >= ay && by <= ay + PAD_H) { bx = W - 20 - PAD_W - BALL; vx = -vx; if (vx > -12) vx--; }
-        if (bx < -20) { ascore++; bx = W / 2; by = H / 2; vx = 3; vy = (ascore & 1) ? 2 : -2; }
-        if (bx > W + 20) { pscore++; bx = W / 2; by = H / 2; vx = -3; vy = (pscore & 1) ? -2 : 2; }
+        if (bx + BALL >= win_w - 20 - PAD_W && bx + BALL <= win_w - 20 && by + BALL >= ay && by <= ay + PAD_H) { bx = win_w - 20 - PAD_W - BALL; vx = -vx; if (vx > -12) vx--; }
+        if (bx < -20) { ascore++; bx = win_w / 2; by = win_h / 2; vx = 3; vy = (ascore & 1) ? 2 : -2; }
+        if (bx > win_w + 20) { pscore++; bx = win_w / 2; by = win_h / 2; vx = -3; vy = (pscore & 1) ? -2 : 2; }
 
         uint32_t d = pix;
-        x11_change_gc_fg(gc, 0xFF101018); x11_fill_rect(d, gc, 0, 0, W, H);
+        x11_change_gc_fg(gc, 0xFF101018); x11_fill_rect(d, gc, 0, 0, win_w, win_h);
         x11_change_gc_fg(gc, 0xFF404060);
-        for (int y = 0; y < H; y += 20) x11_fill_rect(d, gc, W / 2 - 2, y, 4, 10);
+        for (int y = 0; y < win_h; y += 20) x11_fill_rect(d, gc, win_w / 2 - 2, y, 4, 10);
         x11_change_gc_fg(gc, 0xFF50FA7B); x11_fill_rect(d, gc, 20, py, PAD_W, PAD_H);
-        x11_change_gc_fg(gc, 0xFFFF5555); x11_fill_rect(d, gc, W - 20 - PAD_W, ay, PAD_W, PAD_H);
+        x11_change_gc_fg(gc, 0xFFFF5555); x11_fill_rect(d, gc, win_w - 20 - PAD_W, ay, PAD_W, PAD_H);
         x11_change_gc_fg(gc, 0xFFFFFFFF); x11_fill_rect(d, gc, bx, by, BALL, BALL);
         char score[32]; snprintf(score, sizeof(score), "%d   %d", pscore, ascore);
-        x11_text8(d, gc, W / 2 - 24, 30, score);
-        x11_text8(d, gc, 20, H - 20, "W/S move");
-        if (pix != wid) x11_copy_area(pix, wid, gc, 0, 0, 0, 0, W, H);
+        x11_text8(d, gc, win_w / 2 - 24, 30, score);
+        x11_text8(d, gc, 20, win_h - 20, "W/S move");
+        if (pix != wid) x11_copy_area(pix, wid, gc, 0, 0, 0, 0, win_w, win_h);
 
         struct timespec ts; ts.tv_sec = 0; ts.tv_nsec = 16000000;
         nanosleep(&ts, NULL);
