@@ -115,40 +115,19 @@ enum {
 };
 
 /* File/socket seek, access, and misc constants shared with guest. */
-#if !defined(GUEST)
-#ifdef SEEK_SET
-#define _GUEST_SEEK_SET SEEK_SET
-#undef SEEK_SET
-#endif
-#ifdef SEEK_CUR
-#define _GUEST_SEEK_CUR SEEK_CUR
-#undef SEEK_CUR
-#endif
-#ifdef SEEK_END
-#define _GUEST_SEEK_END SEEK_END
-#undef SEEK_END
-#endif
-#endif
 enum {
     _GUEST(AT_FDCWD)            = -100,
+#ifndef SEEK_SET
     _GUEST(SEEK_SET)            = 0,
+#endif
+#ifndef SEEK_CUR
     _GUEST(SEEK_CUR)            = 1,
+#endif
+#ifndef SEEK_END
     _GUEST(SEEK_END)            = 2,
+#endif
 };
-#if !defined(GUEST)
-#ifdef _GUEST_SEEK_SET
-#define SEEK_SET _GUEST_SEEK_SET
-#undef _GUEST_SEEK_SET
-#endif
-#ifdef _GUEST_SEEK_CUR
-#define SEEK_CUR _GUEST_SEEK_CUR
-#undef _GUEST_SEEK_CUR
-#endif
-#ifdef _GUEST_SEEK_END
-#define SEEK_END _GUEST_SEEK_END
-#undef _GUEST_SEEK_END
-#endif
-#endif
+
 
 /* Mmap/clock constants shared with guest. */
 enum {
