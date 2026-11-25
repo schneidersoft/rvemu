@@ -206,6 +206,22 @@ int open(const char *path, int flags, ...) {
     return (int)result;
 }
 
+int fcntl(int fd, int cmd, ...) {
+    long arg = 0;
+    if (cmd == F_SETFL || cmd == F_SETFD || cmd == F_SETOWN) {
+        va_list args;
+        va_start(args, cmd);
+        arg = va_arg(args, long);
+        va_end(args);
+    }
+    long result = linux_fcntl(fd, cmd, arg);
+    if (result < 0) {
+        errno = -(int)result;
+        return -1;
+    }
+    return (int)result;
+}
+
 int unlink(const char *path) {
     long result = linux_unlinkat(AT_FDCWD, path, 0);
     if (result < 0) {

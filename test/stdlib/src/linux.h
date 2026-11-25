@@ -156,6 +156,7 @@ static inline long linux_ftruncate(int fd, long length) { return linux_syscall(S
 static inline long linux_fsync(int fd) { return linux_syscall(SYS_fsync, fd, 0, 0, 0, 0, 0); }
 static inline long linux_readlinkat(int dirfd, const char *path, char *buf, unsigned long bufsiz) { return linux_syscall(SYS_readlinkat, dirfd, (long)(uintptr_t)path, (long)(uintptr_t)buf, (long)bufsiz, 0, 0); }
 static inline long linux_symlinkat(const char *target, int newdirfd, const char *linkpath) { return linux_syscall(SYS_symlinkat, (long)(uintptr_t)target, newdirfd, (long)(uintptr_t)linkpath, 0, 0, 0); }
+static inline long linux_fcntl(int fd, int cmd, long arg) { return linux_syscall(SYS_fcntl, fd, cmd, arg, 0, 0, 0); }
 static inline long linux_ioctl(int fd, unsigned long request, void *arg) { return linux_syscall(SYS_ioctl, fd, (long)request, (long)(uintptr_t)arg, 0, 0, 0); }
 static inline long linux_pread64(int fd, void *buf, unsigned long count, long offset) { return linux_syscall(SYS_pread64, fd, (long)(uintptr_t)buf, (long)count, offset, 0, 0); }
 static inline long linux_pwrite64(int fd, const void *buf, unsigned long count, long offset) { return linux_syscall(SYS_pwrite64, fd, (long)(uintptr_t)buf, (long)count, offset, 0, 0); }
