@@ -82,7 +82,11 @@ bin/net.bin: $(NETTEST) $(NETHEADERS) src/guest.h test/riscv.ld
 	@mkdir -p bin
 	riscv64-unknown-elf-gcc -o bin/net.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld $(NETTEST) -lgcc
 	riscv64-unknown-elf-objcopy -O binary bin/net.elf bin/net.bin
-	riscv64-unknown-elf-objdump -d bin/net.elf > bin/net.elf.disas
+
+bin/x11.bin: test/x11.c test/startup.rv64i.s test/dbg.c test/assert.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/time.c test/stdlib/src/net.c $(NETHEADERS) src/guest.h test/riscv.ld
+	@mkdir -p bin
+	riscv64-unknown-elf-gcc -o bin/x11.elf -ggdb -Wall -Werror -nostdinc -I./test/stdlib/include -I./test/stdlib/src -I./test -I./src -nostdlib -nodefaultlibs -ffreestanding -nostartfiles -static -mcmodel=medlow -march=rv64i -mabi=lp64 -T test/riscv.ld test/x11.c test/startup.rv64i.s test/dbg.c test/assert.c test/stdlib/src/platform.c test/stdlib/src/stdio.c test/stdlib/src/string.c test/stdlib/src/stdlib.c test/stdlib/src/time.c test/stdlib/src/net.c -lgcc
+	riscv64-unknown-elf-objcopy -O binary bin/x11.elf bin/x11.bin
 
 net: bin/riscv64i bin/net.bin
 	@echo "-------"
