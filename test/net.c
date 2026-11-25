@@ -9,7 +9,7 @@
  *   - the body contains the marker `rvemu-net-ok`
  *
  * No DNS or external network is needed: the stub resolver
- * (test/stdlib/net.c) short-circuits IPv4 literals, and 127.0.0.1 reaches
+ * (test/stdlib/src/net.c) short-circuits IPv4 literals, and 127.0.0.1 reaches
  * the server straight through the host's loopback via the emulator's
  * socket forwarding.
  *
