@@ -8,10 +8,12 @@
  * which lets the emulator copy them byte for byte.
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -317,14 +319,50 @@ static int status_result(long result) { return count_result(result) < 0 ? -1 : 0
 
 int socket(int domain, int type, int protocol) { return socket_result(linux_socket(domain, type, protocol)); }
 
+int bind(int fd, const struct sockaddr *address, socklen_t length) { return status_result(linux_bind(fd, address, (long)length)); }
+
+int listen(int fd, int backlog) { return status_result(linux_listen(fd, backlog)); }
+
+int accept(int fd, struct sockaddr *address, socklen_t *length) {
+    long l = length ? (long)*length : 0;
+    int r = socket_result(linux_accept(fd, address, length ? &l : NULL));
+    if (length && r >= 0) *length = (socklen_t)l;
+    return r;
+}
+
 int connect(int fd, const struct sockaddr *address, socklen_t length) { return status_result(linux_connect(fd, address, (long)length)); }
 
 ssize_t send(int fd, const void *buffer, size_t length, int flags) {
     return count_result(linux_sendto(fd, buffer, (unsigned long)length, flags, NULL, 0));
 }
 
+ssize_t sendto(int fd, const void *buffer, size_t length, int flags, const struct sockaddr *dest, socklen_t dest_len) {
+    return count_result(linux_sendto(fd, buffer, (unsigned long)length, flags, dest, (long)dest_len));
+}
+
 ssize_t recv(int fd, void *buffer, size_t length, int flags) {
     return count_result(linux_recvfrom(fd, buffer, (unsigned long)length, flags, NULL, 0));
+}
+
+ssize_t recvfrom(int fd, void *buffer, size_t length, int flags, struct sockaddr *src, socklen_t *src_len) {
+    long l = src_len ? (long)*src_len : 0;
+    ssize_t r = count_result(linux_recvfrom(fd, buffer, (unsigned long)length, flags, src, src_len ? &l : NULL));
+    if (src_len && r >= 0) *src_len = (socklen_t)l;
+    return r;
+}
+
+int getsockname(int fd, struct sockaddr *address, socklen_t *length) {
+    long l = length ? (long)*length : 0;
+    int r = status_result(linux_getsockname(fd, address, length ? &l : NULL));
+    if (length && r == 0) *length = (socklen_t)l;
+    return r;
+}
+
+int getpeername(int fd, struct sockaddr *address, socklen_t *length) {
+    long l = length ? (long)*length : 0;
+    int r = status_result(linux_getpeername(fd, address, length ? &l : NULL));
+    if (length && r == 0) *length = (socklen_t)l;
+    return r;
 }
 
 int setsockopt(int fd, int level, int option, const void *value, socklen_t length) {
@@ -401,32 +439,80 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
             return 0;
         }
     }
-    return EAI_NODATA;
+    return EAI_NONAME;
 }
 
 void freeaddrinfo(struct addrinfo *result) { (void)result; }
 
 const char *gai_strerror(int code) {
     switch (code) {
-    case 0:
-        return "Success";
-    case EAI_BADFLAGS:
-        return "Invalid flags";
-    case EAI_NONAME:
-        return "Name does not resolve";
-    case EAI_FAMILY:
-        return "Unsupported address family";
-    case EAI_SOCKTYPE:
-        return "Unsupported socket type";
-    case EAI_SERVICE:
-        return "Unsupported service";
-    case EAI_NODATA:
-        return "No address associated with name";
-    case EAI_MEMORY:
-        return "Memory allocation failure";
-    case EAI_SYSTEM:
-        return "System error";
-    default:
-        return "Unknown error";
+    case 0: return "Success";
+    case EAI_BADFLAGS: return "Invalid flags";
+    case EAI_NONAME: case EAI_NODATA: return "Name does not resolve";
+    case EAI_AGAIN: return "Temporary failure in name resolution";
+    case EAI_FAIL: return "Non-recoverable failure in name resolution";
+    case EAI_FAMILY: return "Unsupported address family";
+    case EAI_SOCKTYPE: return "Unsupported socket type";
+    case EAI_SERVICE: return "Unsupported service";
+    case EAI_MEMORY: return "Memory allocation failure";
+    case EAI_SYSTEM: return "System error";
+    case EAI_OVERFLOW: return "Result too large";
+    default: return "Unknown error";
     }
+}
+
+int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host, socklen_t hostlen, char *serv, socklen_t servlen, int flags) {
+    (void)flags;
+    if (sa == NULL) return EAI_FAMILY;
+    if (sa->sa_family == AF_INET) {
+        if (salen < (socklen_t)sizeof(struct sockaddr_in)) return EAI_FAMILY;
+        const struct sockaddr_in *in = (const struct sockaddr_in *)sa;
+        if (host && hostlen) {
+            /* s_addr stored in network byte order in our impl? we set it as raw; be careful */
+            unsigned int v = in->sin_addr.s_addr;
+            unsigned char b0=(v)&0xff,b1=(v>>8)&0xff,b2=(v>>16)&0xff,b3=(v>>24)&0xff;
+            char tmp[32]; int n = 0;
+            /* print as a.b.c.d - s_addr was stored via parse_ipv4 as network-order uint32 in memory; on little-endian guest it's bytes a.b.c.d */
+            n = snprintf(tmp, sizeof(tmp), "%u.%u.%u.%u", b0, b1, b2, b3);
+            if ((socklen_t)(n+1) > hostlen) return EAI_OVERFLOW;
+            memcpy(host, tmp, (size_t)n+1);
+        }
+        if (serv && servlen) {
+            uint16_t port = byte_swap16(in->sin_port);
+            char tmp[16]; int n = snprintf(tmp, sizeof(tmp), "%u", (unsigned)port);
+            if ((socklen_t)(n+1) > servlen) return EAI_OVERFLOW;
+            memcpy(serv, tmp, (size_t)n+1);
+        }
+        return 0;
+    }
+    return EAI_FAMILY;
+}
+
+uint32_t htonl(uint32_t x) { return byte_swap32(x); }
+uint16_t htons(uint16_t x) { return byte_swap16(x); }
+uint32_t ntohl(uint32_t x) { return byte_swap32(x); }
+uint16_t ntohs(uint16_t x) { return byte_swap16(x); }
+
+int inet_pton(int af, const char *src, void *dst) {
+    if (af == AF_INET) {
+        uint32_t addr;
+        if (parse_ipv4(src, &addr) != 0) return 0;
+        memcpy(dst, &addr, 4);
+        return 1;
+    }
+    errno = EAFNOSUPPORT;
+    return -1;
+}
+
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
+    if (af == AF_INET) {
+        const unsigned char *a = (const unsigned char *)src;
+        char tmp[32];
+        int n = snprintf(tmp, sizeof(tmp), "%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
+        if ((socklen_t)(n+1) > size) { errno = ENOSPC; return NULL; }
+        memcpy(dst, tmp, (size_t)n+1);
+        return dst;
+    }
+    errno = EAFNOSUPPORT;
+    return NULL;
 }

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <string.h>
 
 void *memcpy(void *destination, const void *source, size_t length) {
@@ -208,43 +209,108 @@ size_t strcspn(const char *string, const char *reject) {
 static char *strtok_position;
 
 char *strtok(char *string, const char *delimiters) {
-    if (string != NULL) {
-        strtok_position = string;
+    return strtok_r(string, delimiters, &strtok_position);
+}
+
+void *memchr(const void *s, int c, size_t n) {
+    const unsigned char *p = (const unsigned char *)s;
+    for (size_t i = 0; i < n; i++) {
+        if (p[i] == (unsigned char)c) {
+            return (void *)(p + i);
+        }
     }
-    if (strtok_position == NULL) {
+    return NULL;
+}
+
+size_t strnlen(const char *s, size_t maxlen) {
+    size_t n = 0;
+    while (n < maxlen && s[n] != '\0') {
+        n++;
+    }
+    return n;
+}
+
+char *strdup(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *p = (char *)malloc(n);
+    if (p != NULL) {
+        memcpy(p, s, n);
+    }
+    return p;
+}
+
+char *strndup(const char *s, size_t n) {
+    size_t len = strnlen(s, n);
+    char *p = (char *)malloc(len + 1);
+    if (p != NULL) {
+        memcpy(p, s, len);
+        p[len] = '\0';
+    }
+    return p;
+}
+
+char *strtok_r(char *str, const char *delim, char **saveptr) {
+    char *p = str != NULL ? str : *saveptr;
+    if (p == NULL) {
         return NULL;
     }
-
-    /* Skip the delimiters that separate the previous token from this one. */
-    while (*strtok_position != '\0') {
-        const char *candidate = delimiters;
-        int delimiter = 0;
-        for (; *candidate != '\0'; candidate++) {
-            if (*strtok_position == *candidate) {
-                delimiter = 1;
-                break;
-            }
+    while (*p != '\0') {
+        const char *d = delim;
+        int is_delim = 0;
+        for (; *d != '\0'; d++) {
+            if (*p == *d) { is_delim = 1; break; }
         }
-        if (!delimiter) {
-            break;
-        }
-        strtok_position++;
+        if (!is_delim) break;
+        p++;
     }
-    if (*strtok_position == '\0') {
-        return NULL;
-    }
-
-    char *token = strtok_position;
-    while (*strtok_position != '\0') {
-        const char *candidate = delimiters;
-        for (; *candidate != '\0'; candidate++) {
-            if (*strtok_position == *candidate) {
-                *strtok_position = '\0';
-                strtok_position++;
+    if (*p == '\0') { *saveptr = p; return NULL; }
+    char *token = p;
+    while (*p != '\0') {
+        const char *d = delim;
+        for (; *d != '\0'; d++) {
+            if (*p == *d) {
+                *p = '\0';
+                *saveptr = p + 1;
                 return token;
             }
         }
-        strtok_position++;
+        p++;
     }
+    *saveptr = p;
     return token;
+}
+
+static int ascii_tolower(int c) {
+    if (c >= 'A' && c <= 'Z') return c + ('a' - 'A');
+    return c;
+}
+
+int strcasecmp(const char *s1, const char *s2) {
+    while (*s1 != '\0' && ascii_tolower((unsigned char)*s1) == ascii_tolower((unsigned char)*s2)) {
+        s1++; s2++;
+    }
+    return ascii_tolower((unsigned char)*s1) - ascii_tolower((unsigned char)*s2);
+}
+
+int strncasecmp(const char *s1, const char *s2, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        int c1 = ascii_tolower((unsigned char)s1[i]);
+        int c2 = ascii_tolower((unsigned char)s2[i]);
+        if (c1 != c2) return c1 - c2;
+        if (s1[i] == '\0') return 0;
+    }
+    return 0;
+}
+
+char *stpcpy(char *dest, const char *src) {
+    while ((*dest = *src) != '\0') { dest++; src++; }
+    return dest;
+}
+
+char *stpncpy(char *dest, const char *src, size_t n) {
+    size_t i = 0;
+    for (; i < n && src[i] != '\0'; i++) dest[i] = src[i];
+    char *end = dest + i;
+    for (; i < n; i++) dest[i] = '\0';
+    return end;
 }

@@ -1267,6 +1267,64 @@ int fclose(FILE *stream) {
 }
 
 int fseek(FILE *stream, long offset, int whence) {
+    return fseeko(stream, (off_t)offset, whence);
+}
+
+long ftell(FILE *stream) {
+    off_t pos = ftello(stream);
+    if (pos < 0) {
+        return -1L;
+    }
+    return (long)pos;
+}
+
+off_t ftello(FILE *stream) {
+    off_t off = 0;
+    if (stream == NULL) {
+        return (off_t)-1;
+    }
+    if (_flush_stream(stream) == EOF) {
+        return (off_t)-1;
+    }
+    if (stream->kind == STREAM_KIND_MEM || stream->kind == STREAM_KIND_MEMSTREAM) {
+        off_t pos = (off_t)stream->mem_pos - (stream->pushback >= 0 ? 1 : 0) - (off_t)(stream->read_len - stream->read_pos);
+        return pos;
+    }
+    if (stream_do_seek(stream, &off, SEEK_CUR) < 0) {
+        return (off_t)-1;
+    }
+    return off - (stream->pushback >= 0 ? 1 : 0) - (off_t)(stream->read_len - stream->read_pos);
+}
+
+void rewind(FILE *stream) {
+    if (stream == NULL) {
+        return;
+    }
+    (void)fseek(stream, 0L, SEEK_SET);
+    stream->flags &= ~STREAM_ERROR;
+}
+
+int fgetpos(FILE *stream, fpos_t *pos) {
+    off_t off;
+    if (pos == NULL) {
+        return -1;
+    }
+    off = ftello(stream);
+    if (off < 0) {
+        return -1;
+    }
+    *pos = (fpos_t)off;
+    return 0;
+}
+
+int fsetpos(FILE *stream, const fpos_t *pos) {
+    if (pos == NULL) {
+        return -1;
+    }
+    return fseeko(stream, (off_t)*pos, SEEK_SET);
+}
+
+int fseeko(FILE *stream, off_t offset, int whence) {
     off_t off;
     if (stream == NULL) {
         return -1;
@@ -1278,30 +1336,12 @@ int fseek(FILE *stream, long offset, int whence) {
     stream->read_len = 0;
     stream->pushback = -1;
     stream->flags &= ~STREAM_EOF;
-    off = (off_t)offset;
+    off = offset;
     if (stream_do_seek(stream, &off, whence) < 0) {
         stream->flags |= STREAM_ERROR;
         return -1;
     }
     return 0;
-}
-
-long ftell(FILE *stream) {
-    off_t off = 0;
-    if (stream == NULL) {
-        return -1L;
-    }
-    if (_flush_stream(stream) == EOF) {
-        return -1L;
-    }
-    if (stream->kind == STREAM_KIND_MEM || stream->kind == STREAM_KIND_MEMSTREAM) {
-        long pos = (long)stream->mem_pos - (stream->pushback >= 0 ? 1 : 0) - (long)(stream->read_len - stream->read_pos);
-        return pos;
-    }
-    if (stream_do_seek(stream, &off, SEEK_CUR) < 0) {
-        return -1L;
-    }
-    return (long)off - (stream->pushback >= 0 ? 1 : 0) - (long)(stream->read_len - stream->read_pos);
 }
 
 static unsigned int stream_mode_flags(const char *mode, int *ok) {

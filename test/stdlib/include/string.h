@@ -27,4 +27,15 @@ char *strtok(char *str, const char *delim);
 size_t strspn(const char *s, const char *accept);
 size_t strcspn(const char *s, const char *reject);
 
+void *memchr(const void *s, int c, size_t n);
+size_t strnlen(const char *s, size_t maxlen);
+char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
+char *strtok_r(char *str, const char *delim, char **saveptr);
+int strcasecmp(const char *s1, const char *s2);
+int strncasecmp(const char *s1, const char *s2, size_t n);
+char *strerror(int errnum);
+char *stpcpy(char *dest, const char *src);
+char *stpncpy(char *dest, const char *src, size_t n);
+
 #endif

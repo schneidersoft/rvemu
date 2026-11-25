@@ -104,8 +104,8 @@ static inline long linux_sendto(int fd, const void *buffer, unsigned long length
     return linux_syscall(SYS_sendto, fd, (long)(uintptr_t)buffer, (long)length, flags, (long)(uintptr_t)destination, destination_length);
 }
 
-static inline long linux_recvfrom(int fd, void *buffer, unsigned long length, int flags, void *source, long source_length) {
-    return linux_syscall(SYS_recvfrom, fd, (long)(uintptr_t)buffer, (long)length, flags, (long)(uintptr_t)source, source_length);
+static inline long linux_recvfrom(int fd, void *buffer, unsigned long length, int flags, void *source, void *source_length) {
+    return linux_syscall(SYS_recvfrom, fd, (long)(uintptr_t)buffer, (long)length, flags, (long)(uintptr_t)source, (long)(uintptr_t)source_length);
 }
 
 static inline long linux_setsockopt(int fd, int level, int option, const void *value, long length) {
@@ -117,6 +117,48 @@ static inline long linux_getsockopt(int fd, int level, int option, void *value, 
 }
 
 static inline long linux_shutdown(int fd, int how) { return linux_syscall(SYS_shutdown, fd, how, 0, 0, 0, 0); }
+
+static inline long linux_bind(int fd, const void *address, long length) { return linux_syscall(SYS_bind, fd, (long)(uintptr_t)address, length, 0, 0, 0); }
+
+static inline long linux_listen(int fd, int backlog) { return linux_syscall(SYS_listen, fd, backlog, 0, 0, 0, 0); }
+
+static inline long linux_accept(int fd, void *address, void *length) { return linux_syscall(SYS_accept, fd, (long)(uintptr_t)address, (long)(uintptr_t)length, 0, 0, 0); }
+
+static inline long linux_getsockname(int fd, void *address, void *length) { return linux_syscall(SYS_getsockname, fd, (long)(uintptr_t)address, (long)(uintptr_t)length, 0, 0, 0); }
+
+static inline long linux_getpeername(int fd, void *address, void *length) { return linux_syscall(SYS_getpeername, fd, (long)(uintptr_t)address, (long)(uintptr_t)length, 0, 0, 0); }
+
+static inline long linux_dup(int fd) { return linux_syscall(SYS_dup, fd, 0, 0, 0, 0, 0); }
+
+static inline long linux_dup3(int oldfd, int newfd, int flags) { return linux_syscall(SYS_dup3, oldfd, newfd, flags, 0, 0, 0); }
+
+static inline long linux_pipe2(int fds[2], int flags) { return linux_syscall(SYS_pipe2, (long)(uintptr_t)fds, flags, 0, 0, 0, 0); }
+
+static inline long linux_mkdirat(int dirfd, const char *path, int mode) { return linux_syscall(SYS_mkdirat, dirfd, (long)(uintptr_t)path, mode, 0, 0, 0); }
+
+static inline long linux_renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath) { return linux_syscall(SYS_renameat, olddirfd, (long)(uintptr_t)oldpath, newdirfd, (long)(uintptr_t)newpath, 0, 0); }
+
+static inline long linux_linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags) { return linux_syscall(SYS_linkat, olddirfd, (long)(uintptr_t)oldpath, newdirfd, (long)(uintptr_t)newpath, flags, 0); }
+
+static inline long linux_faccessat(int dirfd, const char *path, int mode, int flags) { return linux_syscall(SYS_faccessat, dirfd, (long)(uintptr_t)path, mode, flags, 0, 0); }
+
+static inline long linux_getcwd(char *buffer, unsigned long size) { return linux_syscall(SYS_getcwd, (long)(uintptr_t)buffer, (long)size, 0, 0, 0, 0); }
+
+static inline long linux_chdir(const char *path) { return linux_syscall(SYS_chdir, (long)(uintptr_t)path, 0, 0, 0, 0, 0); }
+
+static inline long linux_newfstatat(int dirfd, const char *path, void *stat_buffer, int flags) { return linux_syscall(SYS_newfstatat, dirfd, (long)(uintptr_t)path, (long)(uintptr_t)stat_buffer, flags, 0, 0); }
+
+static inline long linux_nanosleep(const struct linux_timespec *request, struct linux_timespec *remaining) { return linux_syscall(SYS_nanosleep, (long)(uintptr_t)request, (long)(uintptr_t)remaining, 0, 0, 0, 0); }
+
+static inline long linux_clock_getres(int clock, struct linux_timespec *result) { return linux_syscall(SYS_clock_getres, clock, (long)(uintptr_t)result, 0, 0, 0, 0); }
+
+static inline long linux_ftruncate(int fd, long length) { return linux_syscall(SYS_ftruncate, fd, length, 0, 0, 0, 0); }
+static inline long linux_fsync(int fd) { return linux_syscall(SYS_fsync, fd, 0, 0, 0, 0, 0); }
+static inline long linux_readlinkat(int dirfd, const char *path, char *buf, unsigned long bufsiz) { return linux_syscall(SYS_readlinkat, dirfd, (long)(uintptr_t)path, (long)(uintptr_t)buf, (long)bufsiz, 0, 0); }
+static inline long linux_symlinkat(const char *target, int newdirfd, const char *linkpath) { return linux_syscall(SYS_symlinkat, (long)(uintptr_t)target, newdirfd, (long)(uintptr_t)linkpath, 0, 0, 0); }
+static inline long linux_ioctl(int fd, unsigned long request, void *arg) { return linux_syscall(SYS_ioctl, fd, (long)request, (long)(uintptr_t)arg, 0, 0, 0); }
+static inline long linux_pread64(int fd, void *buf, unsigned long count, long offset) { return linux_syscall(SYS_pread64, fd, (long)(uintptr_t)buf, (long)count, offset, 0, 0); }
+static inline long linux_pwrite64(int fd, const void *buf, unsigned long count, long offset) { return linux_syscall(SYS_pwrite64, fd, (long)(uintptr_t)buf, (long)count, offset, 0, 0); }
 
 static inline void linux_exit_group(int status) {
     linux_syscall(SYS_exit_group, status, 0, 0, 0, 0, 0);

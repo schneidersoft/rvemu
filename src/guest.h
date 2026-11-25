@@ -117,6 +117,7 @@ enum {
 /* File/socket seek, access, and misc constants shared with guest. */
 enum {
     _GUEST(AT_FDCWD)            = -100,
+    _GUEST(AT_REMOVEDIR)        = 0x200,
 #ifndef SEEK_SET
     _GUEST(SEEK_SET)            = 0,
 #endif
@@ -136,7 +137,12 @@ enum {
     _GUEST(MAP_PRIVATE)         = 2,
     _GUEST(MAP_FIXED)           = 0x10,
     _GUEST(MAP_ANONYMOUS)       = 0x20,
+#ifndef CLOCK_REALTIME
     _GUEST(CLOCK_REALTIME)      = 0,
+#endif
+#ifndef CLOCK_MONOTONIC
+    _GUEST(CLOCK_MONOTONIC)     = 1,
+#endif
 };
 
 /* Socket ABI (Linux-generic/asm-generic). */
@@ -198,6 +204,7 @@ enum {
     _GUEST(SYS_symlinkat)       = 36,
     _GUEST(SYS_linkat)          = 37,
     _GUEST(SYS_renameat)        = 38,
+    _GUEST(SYS_ftruncate)       = 46,
     _GUEST(SYS_faccessat)       = 48,
     _GUEST(SYS_chdir)           = 49,
     _GUEST(SYS_openat)          = 56,
@@ -211,8 +218,10 @@ enum {
     _GUEST(SYS_writev)          = 66,
     _GUEST(SYS_pread64)         = 67,
     _GUEST(SYS_pwrite64)        = 68,
+    _GUEST(SYS_readlinkat)      = 78,
     _GUEST(SYS_newfstatat)      = 79,
     _GUEST(SYS_fstat)           = 80,
+    _GUEST(SYS_fsync)           = 82,
     _GUEST(SYS_exit)            = 93,
     _GUEST(SYS_exit_group)      = 94,
     _GUEST(SYS_set_tid_address) = 96,
@@ -236,7 +245,12 @@ enum {
     _GUEST(SYS_getegid)         = 177,
     _GUEST(SYS_gettid)          = 178,
     _GUEST(SYS_socket)          = 198,
+    _GUEST(SYS_bind)            = 200,
+    _GUEST(SYS_listen)          = 201,
+    _GUEST(SYS_accept)          = 202,
     _GUEST(SYS_connect)         = 203,
+    _GUEST(SYS_getsockname)     = 204,
+    _GUEST(SYS_getpeername)     = 205,
     _GUEST(SYS_sendto)          = 206,
     _GUEST(SYS_recvfrom)        = 207,
     _GUEST(SYS_setsockopt)      = 208,

@@ -19,8 +19,37 @@
 
 int errno;
 
+static void (*atexit_funcs[32])(void);
+static int atexit_count;
+
+int atexit(void (*func)(void)) {
+    if (func == NULL || atexit_count >= (int)(sizeof(atexit_funcs)/sizeof(atexit_funcs[0]))) return -1;
+    atexit_funcs[atexit_count++] = func;
+    return 0;
+}
+
+static void run_atexit(void) {
+    while (atexit_count > 0) {
+        atexit_count--;
+        atexit_funcs[atexit_count]();
+    }
+}
+
 void exit(int status) {
+    run_atexit();
     linux_exit_group(status);
+    while (1) {
+    }
+}
+
+void _Exit(int status) {
+    linux_exit_group(status);
+    while (1) {
+    }
+}
+
+void abort(void) {
+    linux_exit_group(134);
     while (1) {
     }
 }
@@ -83,13 +112,13 @@ static const struct {
     {EINPROGRESS, "Operation now in progress"},
 };
 
-const char *strerror(int number) {
+char *strerror(int number) {
     for (size_t i = 0; i < sizeof(error_messages) / sizeof(error_messages[0]); i++) {
         if (error_messages[i].number == number) {
-            return error_messages[i].message;
+            return (char *)error_messages[i].message;
         }
     }
-    return "Unknown error";
+    return (char *)"Unknown error";
 }
 
 void perror(const char *string) {
@@ -119,6 +148,12 @@ int gettimeofday(struct timeval *time, struct timezone *zone) {
     return 0;
 }
 
+int settimeofday(const struct timeval *tv, const struct timezone *tz) {
+    (void)tv; (void)tz;
+    errno = EPERM;
+    return -1;
+}
+
 ssize_t read(int fd, void *buffer, size_t length) {
     long result = linux_read(fd, buffer, (unsigned long)length);
     if (result < 0) {
@@ -146,13 +181,13 @@ int close(int fd) {
     return 0;
 }
 
-long lseek(int fd, long offset, int whence) {
-    long result = linux_lseek(fd, offset, whence);
+off_t lseek(int fd, off_t offset, int whence) {
+    long result = linux_lseek(fd, (long)offset, whence);
     if (result < 0) {
         errno = -(int)result;
-        return -1;
+        return (off_t)-1;
     }
-    return result;
+    return (off_t)result;
 }
 
 int open(const char *path, int flags, ...) {
@@ -183,6 +218,279 @@ int unlink(const char *path) {
 int getpid(void) { return (int)linux_getpid(); }
 
 int getuid(void) { return (int)linux_getuid(); }
+
+int getgid(void) { return 0; }
+int geteuid(void) { return (int)linux_getuid(); }
+int getegid(void) { return 0; }
+
+int rmdir(const char *path) {
+    long r = linux_unlinkat(AT_FDCWD, path, AT_REMOVEDIR);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int access(const char *path, int mode) { return faccessat(AT_FDCWD, path, mode, 0); }
+
+int faccessat(int dirfd, const char *path, int mode, int flags) {
+    long r = linux_faccessat(dirfd, path, mode, flags);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int dup(int fd) {
+    long r = linux_dup(fd);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (int)r;
+}
+
+int dup2(int oldfd, int newfd) {
+    if (oldfd == newfd) return newfd;
+    long r = linux_dup3(oldfd, newfd, 0);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (int)r;
+}
+
+int dup3(int oldfd, int newfd, int flags) {
+    long r = linux_dup3(oldfd, newfd, flags);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (int)r;
+}
+
+int pipe(int pipefd[2]) { return pipe2(pipefd, 0); }
+
+int pipe2(int pipefd[2], int flags) {
+    long r = linux_pipe2(pipefd, flags);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int chdir(const char *path) {
+    long r = linux_chdir(path);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+char *getcwd(char *buf, size_t size) {
+    char tmp[256];
+    char *use = buf ? buf : tmp;
+    size_t usz = buf ? size : sizeof(tmp);
+    long r = linux_getcwd(use, usz);
+    if (r < 0) { errno = -(int)r; return NULL; }
+    if (buf) return buf;
+    size_t len = strlen(tmp) + 1;
+    char *out = (char *)malloc(len);
+    if (out) memcpy(out, tmp, len);
+    return out;
+}
+
+int isatty(int fd) {
+    (void)fd;
+    errno = ENOTTY;
+    return 0;
+}
+
+unsigned int sleep(unsigned int seconds) {
+    struct linux_timespec req, rem;
+    req.tv_sec = (long)seconds; req.tv_nsec = 0;
+    rem.tv_sec = 0; rem.tv_nsec = 0;
+    if (linux_nanosleep(&req, &rem) < 0) return (unsigned int)rem.tv_sec;
+    return 0;
+}
+
+int usleep(unsigned int usec) {
+    struct linux_timespec req, rem;
+    req.tv_sec = usec / 1000000u;
+    req.tv_nsec = (long)(usec % 1000000u) * 1000L;
+    if (linux_nanosleep(&req, &rem) < 0) { errno = EINTR; return -1; }
+    return 0;
+}
+
+ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
+    long r = linux_pread64(fd, buf, count, (long)offset);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (ssize_t)r;
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
+    long r = linux_pwrite64(fd, buf, count, (long)offset);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (ssize_t)r;
+}
+
+int fsync(int fd) {
+    long r = linux_fsync(fd);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int ftruncate(int fd, off_t length) {
+    long r = linux_ftruncate(fd, (long)length);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int truncate(const char *path, off_t length) {
+    int fd = open(path, O_WRONLY);
+    if (fd < 0) return -1;
+    int r = ftruncate(fd, length);
+    int saved = errno;
+    close(fd);
+    if (r < 0) errno = saved;
+    return r;
+}
+
+int link(const char *oldpath, const char *newpath) {
+    long r = linux_linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+int symlink(const char *target, const char *linkpath) {
+    long r = linux_symlinkat(target, AT_FDCWD, linkpath);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return 0;
+}
+
+ssize_t readlink(const char *path, char *buf, size_t bufsiz) {
+    long r = linux_readlinkat(AT_FDCWD, path, buf, bufsiz);
+    if (r < 0) { errno = -(int)r; return -1; }
+    return (ssize_t)r;
+}
+
+
+static int is_space_c(int c) { return c==' '||c=='\f'||c=='\n'||c=='\r'||c=='\t'||c=='\v'; }
+static int digit_val(int c) {
+    if (c>='0'&&c<='9') return c-'0';
+    if (c>='a'&&c<='z') return c-'a'+10;
+    if (c>='A'&&c<='Z') return c-'A'+10;
+    return -1;
+}
+
+unsigned long long strtoull(const char *nptr, char **endptr, int base) {
+    const char *p = nptr;
+    int neg = 0;
+    unsigned long long acc = 0;
+    int any = 0;
+    while (is_space_c((unsigned char)*p)) p++;
+    if (*p == '+' || *p == '-') { neg = (*p == '-'); p++; }
+    if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { base = 16; p += 2; }
+    else if ((base == 0 || base == 2) && p[0] == '0' && (p[1] == 'b' || p[1] == 'B')) { base = 2; p += 2; }
+    else if (base == 0) { base = (p[0] == '0') ? 8 : 10; }
+    if (base < 2 || base > 36) { if (endptr) *endptr = (char *)nptr; return 0; }
+    for (;;) {
+        int d = digit_val((unsigned char)*p);
+        if (d < 0 || d >= base) break;
+        if (acc > (~(unsigned long long)0 - (unsigned long long)d) / (unsigned long long)base) {
+            acc = ~(unsigned long long)0;
+            errno = ERANGE;
+        } else {
+            acc = acc * (unsigned long long)base + (unsigned long long)d;
+        }
+        any = 1; p++;
+    }
+    if (endptr) *endptr = (char *)(any ? p : nptr);
+    return neg ? -acc : acc;
+}
+
+long long strtoll(const char *nptr, char **endptr, int base) {
+    const char *p = nptr;
+    int neg = 0;
+    while (is_space_c((unsigned char)*p)) p++;
+    if (*p == '-') neg = 1;
+    else if (*p == '+') neg = 0;
+    unsigned long long v = strtoull(nptr, endptr, base);
+    if (neg) {
+        unsigned long long mag = (unsigned long long)(-(long long)v);
+        unsigned long long limit = (unsigned long long)1 << 63;
+        if (mag > limit) { errno = ERANGE; return (long long)(~limit); }
+        return -(long long)mag;
+    }
+    if (v > (unsigned long long)(((unsigned long long)1 << 63) - 1)) { errno = ERANGE; return (long long)(((unsigned long long)1 << 63) - 1); }
+    return (long long)v;
+}
+
+unsigned long strtoul(const char *nptr, char **endptr, int base) { return (unsigned long)strtoull(nptr, endptr, base); }
+long strtol(const char *nptr, char **endptr, int base) { return (long)strtoll(nptr, endptr, base); }
+
+double strtod(const char *nptr, char **endptr) {
+    const char *p = nptr;
+    int neg = 0;
+    double val = 0.0;
+    int any = 0;
+    while (is_space_c((unsigned char)*p)) p++;
+    if (*p == '+' || *p == '-') { neg = (*p == '-'); p++; }
+    while (*p >= '0' && *p <= '9') { any = 1; val = val * 10.0 + (*p - '0'); p++; }
+    if (*p == '.') {
+        double frac = 1.0;
+        p++;
+        while (*p >= '0' && *p <= '9') { any = 1; frac /= 10.0; val += (*p - '0') * frac; p++; }
+    }
+    if (any && (*p == 'e' || *p == 'E')) {
+        const char *e = p + 1;
+        int eneg = 0; int exp = 0; int eany = 0;
+        if (*e == '+' || *e == '-') { eneg = (*e == '-'); e++; }
+        while (*e >= '0' && *e <= '9') { eany = 1; exp = exp * 10 + (*e - '0'); e++; }
+        if (eany) {
+            double pow10 = 1.0;
+            while (exp-- > 0) pow10 *= 10.0;
+            val = eneg ? val / pow10 : val * pow10;
+            p = e;
+        }
+    }
+    if (endptr) *endptr = (char *)(any ? p : nptr);
+    return neg ? -val : val;
+}
+
+float strtof(const char *nptr, char **endptr) { return (float)strtod(nptr, endptr); }
+long double strtold(const char *nptr, char **endptr) { return (long double)strtod(nptr, endptr); }
+long atol(const char *s) { return strtol(s, NULL, 10); }
+long long atoll(const char *s) { return strtoll(s, NULL, 10); }
+double atof(const char *s) { return strtod(s, NULL); }
+
+int abs(int x) { return x < 0 ? -x : x; }
+long labs(long x) { return x < 0 ? -x : x; }
+long long llabs(long long x) { return x < 0 ? -x : x; }
+div_t div(int numer, int denom) { div_t r; r.quot = numer / denom; r.rem = numer % denom; return r; }
+ldiv_t ldiv(long numer, long denom) { ldiv_t r; r.quot = numer / denom; r.rem = numer % denom; return r; }
+lldiv_t lldiv(long long numer, long long denom) { lldiv_t r; r.quot = numer / denom; r.rem = numer % denom; return r; }
+
+void qsort(void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *)) {
+    unsigned char *b = (unsigned char *)base;
+    unsigned char *tmp = (unsigned char *)malloc(size);
+    if (tmp == NULL) return;
+    /* simple shell sort for small libc */
+    for (size_t gap = nmemb / 2; gap > 0; gap /= 2) {
+        for (size_t i = gap; i < nmemb; i++) {
+            memcpy(tmp, b + i * size, size);
+            size_t j = i;
+            while (j >= gap && compar(b + (j - gap) * size, tmp) > 0) {
+                memcpy(b + j * size, b + (j - gap) * size, size);
+                j -= gap;
+            }
+            memcpy(b + j * size, tmp, size);
+        }
+    }
+    free(tmp);
+}
+
+void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *)) {
+    const unsigned char *b = (const unsigned char *)base;
+    size_t lo = 0, hi = nmemb;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        int c = compar(key, b + mid * size);
+        if (c == 0) return (void *)(b + mid * size);
+        if (c > 0) lo = mid + 1; else hi = mid;
+    }
+    return NULL;
+}
+
+static unsigned int rand_state = 1;
+int rand(void) { rand_state = rand_state * 1103515245u + 12345u; return (int)((rand_state >> 16) & 0x7fffffff); }
+void srand(unsigned int seed) { rand_state = seed ? seed : 1; }
+
+char *getenv(const char *name) { (void)name; return NULL; }
+int system(const char *command) { if (command == NULL) return 0; errno = ENOSYS; return -1; }
 
 typedef struct malloc_block {
     size_t size;

@@ -50,9 +50,16 @@ struct sockaddr_in6 {
 };
 
 int socket(int domain, int type, int protocol);
+int bind(int sockfd, const struct sockaddr *address, socklen_t length);
+int listen(int sockfd, int backlog);
+int accept(int sockfd, struct sockaddr *address, socklen_t *length);
 int connect(int sockfd, const struct sockaddr *address, socklen_t length);
 ssize_t send(int sockfd, const void *buffer, size_t length, int flags);
+ssize_t sendto(int sockfd, const void *buffer, size_t length, int flags, const struct sockaddr *dest, socklen_t dest_len);
 ssize_t recv(int sockfd, void *buffer, size_t length, int flags);
+ssize_t recvfrom(int sockfd, void *buffer, size_t length, int flags, struct sockaddr *src, socklen_t *src_len);
+int getsockname(int sockfd, struct sockaddr *address, socklen_t *length);
+int getpeername(int sockfd, struct sockaddr *address, socklen_t *length);
 int setsockopt(int sockfd, int level, int option, const void *value, socklen_t length);
 int getsockopt(int sockfd, int level, int option, void *value, socklen_t *length);
 int shutdown(int sockfd, int how);

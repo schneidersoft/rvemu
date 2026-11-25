@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 typedef struct __stdio_file FILE;
+typedef off_t fpos_t;
 
 typedef ssize_t cookie_read_function_t(void *cookie, char *buf, size_t size);
 typedef ssize_t cookie_write_function_t(void *cookie, const char *buf, size_t size);
@@ -60,6 +61,11 @@ int fileno(FILE *stream);
 int fclose(FILE *stream);
 int fseek(FILE *stream, long offset, int whence);
 long ftell(FILE *stream);
+void rewind(FILE *stream);
+int fgetpos(FILE *stream, fpos_t *pos);
+int fsetpos(FILE *stream, const fpos_t *pos);
+int fseeko(FILE *stream, off_t offset, int whence);
+off_t ftello(FILE *stream);
 
 FILE *fmemopen(void *buf, size_t size, const char *mode);
 FILE *open_memstream(char **ptr, size_t *sizeloc);
