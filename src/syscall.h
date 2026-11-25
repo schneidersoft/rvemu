@@ -6,15 +6,9 @@
 #include "librv64i.h"
 
 /* Linux RISC-V (asm-generic) syscall numbers. */
-#ifndef GUEST
 #define GUEST guest
-#define _GUEST_H_DEFINED_NAMESPACE
-#endif
 #include "guest.h"
-#ifdef _GUEST_H_DEFINED_NAMESPACE
-#undef GUEST
-#undef _GUEST_H_DEFINED_NAMESPACE
-#endif
+
 enum {
     RV_SYS_getcwd = guest_SYS_getcwd,
     RV_SYS_dup = guest_SYS_dup,
