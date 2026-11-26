@@ -18,6 +18,8 @@ typedef struct gdbstub_t {
     int step;
     int stop_reason_sent;
     int halt_on_detach;
+    uint64_t skip_bp;
+    int skip_bp_active;
     uint64_t breakpoints[GDBSTUB_MAX_BPS];
     int bp_count;
     unsigned char rxbuf[GDBSTUB_RXBUF];
