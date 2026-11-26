@@ -354,7 +354,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
         }
         g->halt = 0;
         g->step = 1;
-        return 2;
+        return 1;
     case 'Z':
         if (buf[1] == '0') {
             uint64_t addr = 0;
@@ -500,6 +500,7 @@ int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu) {
         return 0;
     char buf[4096];
     for (;;) {
+        // if halted... wiat for message
         if (g->halt) {
             struct pollfd pfd = {.fd = g->conn_fd, .events = POLLIN};
             int pr = poll(&pfd, 1, -1);
@@ -515,17 +516,17 @@ int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu) {
         if (r < 0) {
             g->attached = 0;
             return -1;
-        }
-        if (r == 0) {
+        } else if (r == 0) {
             if (g->halt)
                 continue;
             return 0;
         }
 
         int action = handle_packet(g, cpu, buf);
-        if (action == 1 || action == 2)
+        if (action == 1) {
             return 0;
-        if (action < 0)
+        } else if (action < 0) {
             return action;
+        }
     }
 }
