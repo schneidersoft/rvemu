@@ -582,29 +582,69 @@ void gdbstub_stop(gdbstub_t *g, int sig) {
 }
 
 int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu) {
-    if (!g->enabled || !g->attached)
+    if (!g->enabled)
         return 0;
     char buf[4096];
     for (;;) {
+        if (!g->attached) {
+            if (g->halt) {
+                if (gdbstub_wait(g) < 0)
+                    return -1;
+            } else {
+                int ar = gdbstub_accept(g);
+                if (ar < 0)
+                    return -1;
+                if (ar == 0)
+                    return 0;
+            }
+        }
+
         if (rx_pump(g) < 0) {
+            if (g->conn_fd >= 0) { close(g->conn_fd); g->conn_fd = -1; }
             g->attached = 0;
+            g->halt = g->halt_on_detach ? 1 : 0;
+            g->step = 0;
+            g->rxlen = 0;
             return -1;
         }
 
         int r = recv_packet(g, buf, sizeof(buf));
         if (r < 0) {
+            if (g->conn_fd >= 0) { close(g->conn_fd); g->conn_fd = -1; }
             g->attached = 0;
+            g->halt = g->halt_on_detach ? 1 : 0;
+            g->step = 0;
+            g->rxlen = 0;
             return -1;
         }
         if (r == 0) {
-            if (!g->halt)
+            if (!g->halt) {
+                if (!g->step && gdbstub_has_breakpoint(g, cpu->pc)) {
+                    if (g->skip_bp_active && g->skip_bp == cpu->pc) {
+                        g->skip_bp_active = 0;
+                    } else {
+                        gdbstub_stop(g, 5);
+                        if (!g->step) {
+                            g->skip_bp = cpu->pc;
+                            g->skip_bp_active = 1;
+                        }
+                        continue;
+                    }
+                } else if (g->skip_bp_active && g->skip_bp != cpu->pc) {
+                    g->skip_bp_active = 0;
+                }
                 return 0;
+            }
             struct pollfd pfd = {.fd = g->conn_fd, .events = POLLIN};
             int pr = poll(&pfd, 1, -1);
             if (pr < 0 && errno == EINTR)
                 continue;
             if (pr <= 0) {
+                if (g->conn_fd >= 0) { close(g->conn_fd); g->conn_fd = -1; }
                 g->attached = 0;
+                g->halt = g->halt_on_detach ? 1 : 0;
+                g->step = 0;
+                g->rxlen = 0;
                 return -1;
             }
             continue;
