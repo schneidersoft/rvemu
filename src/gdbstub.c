@@ -202,9 +202,17 @@ static int remove_breakpoint(gdbstub_t *g, uint64_t addr) {
     return -1;
 }
 
+static void send_hex_msg(gdbstub_t *g, const char *msg) {
+    char out[512];
+    size_t n = strlen(msg);
+    if (n * 2 >= sizeof(out)) { send_packet(g, "OK"); return; }
+    hex_encode(out, (const uint8_t *)msg, n);
+    send_packet(g, out);
+}
+
 static void handle_query(gdbstub_t *g, const char *p) {
     if (strncmp(p, "qSupported", 10) == 0) {
-        send_packet(g, "PacketSize=1000;swbreak+;qXfer:features:read+");
+        send_packet(g, "PacketSize=1000;swbreak+;qXfer:features:read+;qRcmd+");
     } else if (strcmp(p, "qAttached") == 0) {
         send_packet(g, "1");
     } else if (strcmp(p, "qC") == 0) {
@@ -217,6 +225,26 @@ static void handle_query(gdbstub_t *g, const char *p) {
         send_packet(g, "Text=0;Data=0;Bss=0");
     } else if (strncmp(p, "qSymbol", 7) == 0) {
         send_packet(g, "OK");
+    } else if (strncmp(p, "qRcmd,", 6) == 0) {
+        const char *hex = p + 6;
+        size_t hlen = strlen(hex);
+        char cmd[256];
+        size_t clen = hlen / 2;
+        if (clen >= sizeof(cmd)) clen = sizeof(cmd) - 1;
+        for (size_t i = 0; i < clen; i++) {
+            int hi = hex_val(hex[i * 2]), lo = hex_val(hex[i * 2 + 1]);
+            cmd[i] = (hi < 0 || lo < 0) ? '?' : (char)((hi << 4) | lo);
+        }
+        cmd[clen] = '\0';
+        if (strcmp(cmd, "halt-on-detach") == 0) {
+            g->halt_on_detach = 1;
+            send_hex_msg(g, "detach will keep target halted\n");
+        } else if (strcmp(cmd, "run-on-detach") == 0) {
+            g->halt_on_detach = 0;
+            send_hex_msg(g, "detach will resume target\n");
+        } else {
+            send_hex_msg(g, "commands: halt-on-detach, run-on-detach\n");
+        }
     } else if (strncmp(p, "qXfer:features:read:target.xml:0,", 33) == 0) {
         /* Minimal target description so GDB knows it's RV64I */
         static const char xml[] = "l<?xml version=\"1.0\"?>"
@@ -419,7 +447,8 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
             g->conn_fd = -1;
         }
         g->attached = 0;
-        g->halt = 1;
+        g->halt = g->halt_on_detach ? 1 : 0;
+        g->step = 0;
         g->rxlen = 0;
         return -1;
     case 'k':
@@ -497,6 +526,29 @@ int gdbstub_wait(gdbstub_t *g) {
     g->rxlen = 0;
     fprintf(stderr, "[gdbstub] connected\n");
     return 0;
+}
+
+int gdbstub_accept(gdbstub_t *g) {
+    if (!g->enabled || g->listen_fd < 0 || g->attached)
+        return 0;
+    struct pollfd pfd = {.fd = g->listen_fd, .events = POLLIN};
+    int pr = poll(&pfd, 1, 0);
+    if (pr < 0)
+        return errno == EINTR ? 0 : -1;
+    if (pr == 0)
+        return 0;
+    struct sockaddr_in caddr;
+    socklen_t clen = sizeof(caddr);
+    int cfd = accept(g->listen_fd, (struct sockaddr *)&caddr, &clen);
+    if (cfd < 0)
+        return (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? 0 : -1;
+    g->conn_fd = cfd;
+    g->attached = 1;
+    g->halt = 1;
+    g->step = 0;
+    g->rxlen = 0;
+    fprintf(stderr, "[gdbstub] connected\n");
+    return 1;
 }
 
 void gdbstub_notify_exit(gdbstub_t *g, int code) {

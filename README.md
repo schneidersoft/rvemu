@@ -105,4 +105,33 @@ rvemu includes a minimal GDB Remote Serial Protocol (RSP) stub. Start the emulat
 gdb-multiarch bin/rtest.elf -ex "target remote :1234"
 ```
 
-If you have a RISC-V toolchain GDB, `riscv64-unknown-elf-gdb` works the same way. From GDB you can inspect registers and memory, set software breakpoints (`break`), single-step (`stepi`), continue (`continue`), and detach or quit. The guest stays halted until GDB continues it; if GDB detaches, rvemu keeps the guest stopped and waits for another GDB connection. When the guest exits, GDB receives the exit status.
+If you have a RISC-V toolchain GDB, `riscv64-unknown-elf-gdb` works the same way. From GDB you can inspect registers and memory, set software breakpoints (`break`), single-step (`stepi`), and continue (`continue`). Use `continue` to start the guest; `run` is not supported by the GDB remote target.
+
+## Attach / Detach / Reattach
+
+By default, `detach` resumes the guest and leaves it running. rvemu keeps listening on the same port, so you can reattach later; on reattach, the guest is stopped for inspection.
+
+```sh
+# detach and keep guest running
+(gdb) detach
+
+# reattach later (guest stops on attach)
+gdb-multiarch bin/rtest.elf -ex "target remote :1234"
+```
+
+To detach and keep the guest halted, use the monitor command before detaching:
+
+```sh
+(gdb) monitor halt-on-detach
+detach will keep target halted
+(gdb) detach
+```
+
+rvemu waits for a reconnection while the guest is halted. After reattaching, inspect state and `continue` when ready. To restore default behavior:
+
+```sh
+(gdb) monitor run-on-detach
+detach will resume target
+```
+
+When the guest exits, GDB receives the exit status.

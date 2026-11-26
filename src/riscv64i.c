@@ -153,35 +153,47 @@ int main(int argc, char **argv) {
     uint64_t skip_bp = 0;
     int skip_bp_active = 0;
     for (;;) {
-        if (gdb.enabled && gdb.attached) {
-            int gr = gdbstub_command_loop(&gdb, &cpu);
-            if (gr == -2) {
-                gdbstub_close(&gdb);
-                return 1;
-            }
+        if (gdb.enabled) {
             if (!gdb.attached) {
-                fprintf(stderr, "[gdbstub] detached, waiting for reconnection on port %d\n", gdb.port);
-                if (gdbstub_wait(&gdb) < 0) {
+                int ar = gdbstub_accept(&gdb);
+                if (ar < 0) {
                     gdbstub_close(&gdb);
                     return 1;
                 }
-                continue;
-            }
-            if (gdb.halt)
-                continue;
-            if (!gdb.step && gdbstub_has_breakpoint(&gdb, cpu.pc)) {
-                if (skip_bp_active && skip_bp == cpu.pc) {
-                    skip_bp_active = 0;
-                } else {
-                    gdbstub_stop(&gdb, 5);
-                    if (!gdb.step) {
-                        skip_bp = cpu.pc;
-                        skip_bp_active = 1;
+                if (ar == 0 && gdb.halt) {
+                    fprintf(stderr, "[gdbstub] waiting for reconnection on port %d\n", gdb.port);
+                    if (gdbstub_wait(&gdb) < 0) {
+                        gdbstub_close(&gdb);
+                        return 1;
                     }
-                    continue;
                 }
-            } else if (skip_bp_active && skip_bp != cpu.pc) {
-                skip_bp_active = 0;
+            }
+            if (gdb.attached) {
+                int gr = gdbstub_command_loop(&gdb, &cpu);
+                if (gr == -2) {
+                    gdbstub_close(&gdb);
+                    return 1;
+                }
+                if (!gdb.attached)
+                    continue;
+                if (gdb.halt)
+                    continue;
+                if (!gdb.step && gdbstub_has_breakpoint(&gdb, cpu.pc)) {
+                    if (skip_bp_active && skip_bp == cpu.pc) {
+                        skip_bp_active = 0;
+                    } else {
+                        gdbstub_stop(&gdb, 5);
+                        if (!gdb.step) {
+                            skip_bp = cpu.pc;
+                            skip_bp_active = 1;
+                        }
+                        continue;
+                    }
+                } else if (skip_bp_active && skip_bp != cpu.pc) {
+                    skip_bp_active = 0;
+                }
+            } else if (gdb.halt) {
+                continue;
             }
         }
 
@@ -190,7 +202,8 @@ int main(int argc, char **argv) {
         const int ex = cpu_execute(&cpu, inst);
 
         if (ex) {
-            gdbstub_notify_exit(&gdb, guest_exit_code);
+            if (gdb.enabled && gdb.attached)
+                gdbstub_notify_exit(&gdb, guest_exit_code);
             if (!guest_exited) {
                 DBG("execute error: guest did not exit");
                 if (gdb.enabled)
@@ -198,7 +211,8 @@ int main(int argc, char **argv) {
                 return 1;
             }
             break;
-        } else if (was_step) {
+        }
+        if (was_step && gdb.enabled && gdb.attached) {
             gdb.step = 0;
             gdbstub_stop(&gdb, 5);
         }
