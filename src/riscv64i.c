@@ -155,19 +155,29 @@ int main(int argc, char **argv) {
     for (;;) {
         if (gdb.enabled && gdb.attached) {
             int gr = gdbstub_command_loop(&gdb, &cpu);
-            if (gr == -2) { gdbstub_close(&gdb); return 1; }
+            if (gr == -2) {
+                gdbstub_close(&gdb);
+                return 1;
+            }
             if (!gdb.attached) {
                 fprintf(stderr, "[gdbstub] detached, waiting for reconnection on port %d\n", gdb.port);
-                if (gdbstub_wait(&gdb) < 0) { gdbstub_close(&gdb); return 1; }
+                if (gdbstub_wait(&gdb) < 0) {
+                    gdbstub_close(&gdb);
+                    return 1;
+                }
                 continue;
             }
-            if (gdb.halt) continue;
+            if (gdb.halt)
+                continue;
             if (!gdb.step && gdbstub_has_breakpoint(&gdb, cpu.pc)) {
                 if (skip_bp_active && skip_bp == cpu.pc) {
                     skip_bp_active = 0;
                 } else {
                     gdbstub_stop(&gdb, 5);
-                    if (!gdb.step) { skip_bp = cpu.pc; skip_bp_active = 1; }
+                    if (!gdb.step) {
+                        skip_bp = cpu.pc;
+                        skip_bp_active = 1;
+                    }
                     continue;
                 }
             } else if (skip_bp_active && skip_bp != cpu.pc) {
@@ -184,7 +194,8 @@ int main(int argc, char **argv) {
                 gdbstub_notify_exit(&gdb, guest_exit_code);
             if (!guest_exited) {
                 DBG("execute error: guest did not exit");
-                if (gdb.enabled) gdbstub_close(&gdb);
+                if (gdb.enabled)
+                    gdbstub_close(&gdb);
                 return 1;
             }
             break;
@@ -196,6 +207,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (gdb.enabled) gdbstub_close(&gdb);
+    if (gdb.enabled)
+        gdbstub_close(&gdb);
     return guest_exit_code;
 }
