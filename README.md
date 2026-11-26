@@ -92,3 +92,17 @@ built as `bin/stest.bin` and run by `make test`.
 # rv64im
 
 This core also supports rv64im instructions. So you should be able to compile with `-march=rv64im -mabi=lp64` as well
+
+# Debugging with GDB
+
+rvemu includes a minimal GDB Remote Serial Protocol (RSP) stub. Start the emulator with `-g <port>` to listen for a GDB connection on `127.0.0.1:<port>`; the guest starts halted so you can set breakpoints before it runs.
+
+```sh
+# terminal 1: start rvemu and wait for GDB
+./bin/riscv64i -g 1234 bin/rtest.bin
+
+# terminal 2: connect with GDB
+gdb-multiarch bin/rtest.elf -ex "target remote :1234"
+```
+
+If you have a RISC-V toolchain GDB, `riscv64-unknown-elf-gdb` works the same way. From GDB you can inspect registers and memory, set software breakpoints (`break`), single-step (`stepi`), continue (`continue`), and detach or quit. The guest stays halted until GDB continues it; if GDB detaches, rvemu keeps the guest stopped and waits for another GDB connection. When the guest exits, GDB receives the exit status.

@@ -153,7 +153,7 @@ static int remove_breakpoint(gdbstub_t *g, uint64_t addr) {
 
 static void handle_query(gdbstub_t *g, const char *p) {
     if (strncmp(p, "qSupported", 10) == 0) {
-        send_packet(g, "PacketSize=1000;swbreak+;qXfer:features:read-");
+        send_packet(g, "PacketSize=1000;swbreak+;qXfer:features:read+");
     } else if (strcmp(p, "qAttached") == 0) {
         send_packet(g, "1");
     } else if (strcmp(p, "qC") == 0) {
@@ -329,8 +329,9 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
         return 0;
     case 'D':
         send_packet(g, "OK");
-        g->halt = 0;
+        if (g->conn_fd >= 0) { close(g->conn_fd); g->conn_fd = -1; }
         g->attached = 0;
+        g->halt = 1;
         return -1;
     case 'k':
         g->halt = 0;
