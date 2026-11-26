@@ -185,13 +185,12 @@ int main(int argc, char **argv) {
             }
         }
 
-        int was_step = (gdb.enabled && gdb.attached && gdb.step && !gdb.halt);
-        uint32_t inst = cpu_fetch(&cpu);
-        int ex = cpu_execute(&cpu, inst);
+        const int was_step = (gdb.enabled && gdb.attached && gdb.step && !gdb.halt);
+        const uint32_t inst = cpu_fetch(&cpu);
+        const int ex = cpu_execute(&cpu, inst);
 
         if (ex) {
-            if (gdb.enabled && gdb.attached)
-                gdbstub_notify_exit(&gdb, guest_exit_code);
+            gdbstub_notify_exit(&gdb, guest_exit_code);
             if (!guest_exited) {
                 DBG("execute error: guest did not exit");
                 if (gdb.enabled)
@@ -199,15 +198,12 @@ int main(int argc, char **argv) {
                 return 1;
             }
             break;
-        }
-
-        if (was_step && gdb.enabled && gdb.attached) {
+        } else if (was_step) {
             gdb.step = 0;
             gdbstub_stop(&gdb, 5);
         }
     }
 
-    if (gdb.enabled)
-        gdbstub_close(&gdb);
+    gdbstub_close(&gdb);
     return guest_exit_code;
 }
