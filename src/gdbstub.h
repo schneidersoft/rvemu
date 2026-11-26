@@ -15,6 +15,7 @@ typedef struct gdbstub_t {
     int halt;
     int step;
     int stop_reason_sent;
+    int poll_counter;
     uint64_t breakpoints[GDBSTUB_MAX_BPS];
     int bp_count;
 } gdbstub_t;

@@ -76,43 +76,38 @@ static int recv_byte(gdbstub_t *g, int timeout_ms) {
     return (int)c;
 }
 
-static int recv_packet(gdbstub_t *g, char *buf, size_t bufsz, int timeout_ms) {
-    int c;
-    do {
-        c = recv_byte(g, timeout_ms);
-        if (c < 0) return -1;
-        if (c == 0x03) { /* Ctrl-C interrupt */
-            buf[0] = '\x03';
-            buf[1] = '\0';
-            return 1;
-        }
-    } while (c != '$');
-
-    size_t len = 0;
-    unsigned char csum = 0;
+static int recv_packet(gdbstub_t *g, char *buf, size_t bufsz) {
     for (;;) {
-        c = recv_byte(g, 1000);
+        int c = recv_byte(g, -1);
         if (c < 0) return -1;
-        if (c == '#') break;
-        if (c == '}') { /* escape */
-            int e = recv_byte(g, 1000);
-            if (e < 0) return -1;
-            c = e ^ 0x20;
+        if (c == 0x03) { buf[0] = '\x03'; buf[1] = '\0'; return 1; }
+        if (c != '$') continue;
+
+        size_t len = 0;
+        unsigned char csum = 0;
+        for (;;) {
+            c = recv_byte(g, 1000);
+            if (c < 0) return -1;
+            if (c == '#') break;
+            if (c == '}') {
+                int e = recv_byte(g, 1000);
+                if (e < 0) return -1;
+                c = e ^ 0x20;
+            }
+            csum += (unsigned char)c;
+            if (len + 1 < bufsz) buf[len++] = (char)c;
         }
-        csum += (unsigned char)c;
-        if (len + 1 < bufsz) buf[len++] = (char)c;
+        buf[len] = '\0';
+
+        int h1 = recv_byte(g, 1000), h2 = recv_byte(g, 1000);
+        int want = (hex_val((char)h1) << 4) | hex_val((char)h2);
+        if (h1 < 0 || h2 < 0 || want < 0 || (unsigned char)want != csum) {
+            send_raw(g, "-", 1);
+            continue;
+        }
+        send_raw(g, "+", 1);
+        return 1;
     }
-    buf[len] = '\0';
-    int h1 = recv_byte(g, 1000);
-    int h2 = recv_byte(g, 1000);
-    if (h1 < 0 || h2 < 0) return -1;
-    int pkt_csum = (hex_val((char)h1) << 4) | hex_val((char)h2);
-    if (pkt_csum < 0 || (unsigned char)pkt_csum != csum) {
-        send_raw(g, "-", 1);
-        return 0;
-    }
-    send_raw(g, "+", 1);
-    return 1;
 }
 
 static int mem_read_byte(cpu_t *cpu, uint64_t addr, uint8_t *out) {
@@ -429,13 +424,11 @@ static int poll_interrupt(gdbstub_t *g) {
 static int command_loop(gdbstub_t *g, cpu_t *cpu) {
     char buf[4096];
     for (;;) {
-        int r = recv_packet(g, buf, sizeof(buf), -1);
+        int r = recv_packet(g, buf, sizeof(buf));
         if (r < 0) { g->attached = 0; return -1; }
-        if (r == 0) continue;
         int action = handle_packet(g, cpu, buf);
         if (action == 1 || action == 2) return 0;
-        if (action == -1) return -1; /* detach */
-        if (action == -2) return -2; /* kill */
+        if (action < 0) return action;
     }
 }
 
@@ -450,12 +443,8 @@ int gdbstub_stop(gdbstub_t *g, cpu_t *cpu, int sig) {
 
 int gdbstub_tick(gdbstub_t *g, cpu_t *cpu) {
     if (!g->enabled || !g->attached) return 0;
-
-    if (!g->halt) {
-        if (poll_interrupt(g))
-            return gdbstub_stop(g, cpu, 5);
-        return 0;
-    }
-
-    return command_loop(g, cpu);
+    if (g->halt) return command_loop(g, cpu);
+    if (++g->poll_counter < 4096) return 0;
+    g->poll_counter = 0;
+    return poll_interrupt(g) ? gdbstub_stop(g, cpu, 5) : 0;
 }
