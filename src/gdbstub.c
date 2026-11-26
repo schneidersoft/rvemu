@@ -71,62 +71,94 @@ static int send_packet(gdbstub_t *g, const char *payload) {
     return send_raw(g, buf, (size_t)n);
 }
 
-static int recv_byte(gdbstub_t *g, int timeout_ms) {
-    struct pollfd pfd = {.fd = g->conn_fd, .events = POLLIN};
-    int r = poll(&pfd, 1, timeout_ms);
-    if (r == 0)
-        return -2;
-    if (r < 0)
-        return errno == EINTR ? -2 : -1;
-    unsigned char c;
-    ssize_t n = recv(g->conn_fd, &c, 1, 0);
-    if (n <= 0)
+static int rx_pump(gdbstub_t *g) {
+    for (;;) {
+        if (g->rxlen >= GDBSTUB_RXBUF)
+            return -1;
+        ssize_t n = recv(g->conn_fd, g->rxbuf + g->rxlen, (size_t)(GDBSTUB_RXBUF - g->rxlen), MSG_DONTWAIT);
+        if (n > 0) {
+            g->rxlen += (int)n;
+            continue;
+        }
+        if (n == 0)
+            return -1;
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
         return -1;
-    return (int)c;
+    }
+}
+
+static void rx_consume(gdbstub_t *g, int n) {
+    if (n <= 0 || n > g->rxlen)
+        return;
+    g->rxlen -= n;
+    if (g->rxlen > 0)
+        memmove(g->rxbuf, g->rxbuf + n, (size_t)g->rxlen);
 }
 
 static int recv_packet(gdbstub_t *g, char *buf, size_t bufsz) {
-    int c = recv_byte(g, 0);
-    if (c == -2)
-        return 0;
-    if (c < 0)
-        return -1;
-    if (c == 0x03) {
-        buf[0] = '\x03';
-        buf[1] = '\0';
+    for (;;) {
+        int start = -1;
+        for (int i = 0; i < g->rxlen; i++) {
+            if (g->rxbuf[i] == 0x03) {
+                rx_consume(g, i + 1);
+                buf[0] = '\x03';
+                buf[1] = '\0';
+                return 1;
+            }
+            if (g->rxbuf[i] == '$') {
+                start = i;
+                break;
+            }
+        }
+        if (start < 0) {
+            g->rxlen = 0;
+            return 0;
+        }
+        if (start > 0)
+            rx_consume(g, start);
+
+        int end = -1;
+        for (int i = 1; i < g->rxlen; i++) {
+            if (g->rxbuf[i] == '#') {
+                end = i;
+                break;
+            }
+        }
+        if (end < 0)
+            return 0;
+        if (end + 2 >= g->rxlen)
+            return 0;
+
+        unsigned char csum = 0;
+        size_t len = 0;
+        int ok = 1;
+        for (int i = 1; i < end; i++) {
+            unsigned char c = g->rxbuf[i];
+            if (c == '}') {
+                if (++i >= end) { ok = 0; break; }
+                c = g->rxbuf[i] ^ 0x20;
+            }
+            csum += c;
+            if (len + 1 < bufsz)
+                buf[len++] = (char)c;
+        }
+        buf[len] = '\0';
+
+        int h1 = hex_val((char)g->rxbuf[end + 1]);
+        int h2 = hex_val((char)g->rxbuf[end + 2]);
+        int want = (h1 < 0 || h2 < 0) ? -1 : (h1 << 4) | h2;
+        rx_consume(g, end + 3);
+
+        if (!ok || want < 0 || (unsigned char)want != csum) {
+            send_raw(g, "-", 1);
+            continue;
+        }
+        send_raw(g, "+", 1);
         return 1;
     }
-    if (c != '$')
-        return 0;
-
-    size_t len = 0;
-    unsigned char csum = 0;
-    for (;;) {
-        c = recv_byte(g, 1000);
-        if (c < 0)
-            return -1;
-        if (c == '#')
-            break;
-        if (c == '}') {
-            int e = recv_byte(g, 1000);
-            if (e < 0)
-                return -1;
-            c = e ^ 0x20;
-        }
-        csum += (unsigned char)c;
-        if (len + 1 < bufsz)
-            buf[len++] = (char)c;
-    }
-    buf[len] = '\0';
-
-    int h1 = recv_byte(g, 1000), h2 = recv_byte(g, 1000);
-    int want = (hex_val((char)h1) << 4) | hex_val((char)h2);
-    if (h1 < 0 || h2 < 0 || want < 0 || (unsigned char)want != csum) {
-        send_raw(g, "-", 1);
-        return 0;
-    }
-    send_raw(g, "+", 1);
-    return 1;
 }
 
 static int mem_read_byte(cpu_t *cpu, uint64_t addr, uint8_t *out) {
@@ -388,6 +420,7 @@ static int handle_packet(gdbstub_t *g, cpu_t *cpu, const char *buf) {
         }
         g->attached = 0;
         g->halt = 1;
+        g->rxlen = 0;
         return -1;
     case 'k':
         g->halt = 0;
@@ -461,6 +494,7 @@ int gdbstub_wait(gdbstub_t *g) {
     g->attached = 1;
     g->halt = 1;
     g->step = 0;
+    g->rxlen = 0;
     fprintf(stderr, "[gdbstub] connected\n");
     return 0;
 }
@@ -500,8 +534,19 @@ int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu) {
         return 0;
     char buf[4096];
     for (;;) {
-        // if halted... wiat for message
-        if (g->halt) {
+        if (rx_pump(g) < 0) {
+            g->attached = 0;
+            return -1;
+        }
+
+        int r = recv_packet(g, buf, sizeof(buf));
+        if (r < 0) {
+            g->attached = 0;
+            return -1;
+        }
+        if (r == 0) {
+            if (!g->halt)
+                return 0;
             struct pollfd pfd = {.fd = g->conn_fd, .events = POLLIN};
             int pr = poll(&pfd, 1, -1);
             if (pr < 0 && errno == EINTR)
@@ -510,23 +555,13 @@ int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu) {
                 g->attached = 0;
                 return -1;
             }
-        }
-
-        int r = recv_packet(g, buf, sizeof(buf));
-        if (r < 0) {
-            g->attached = 0;
-            return -1;
-        } else if (r == 0) {
-            if (g->halt)
-                continue;
-            return 0;
+            continue;
         }
 
         int action = handle_packet(g, cpu, buf);
-        if (action == 1) {
+        if (action == 1 || action == 2)
             return 0;
-        } else if (action < 0) {
+        if (action < 0)
             return action;
-        }
     }
 }

@@ -6,6 +6,7 @@
 #include "librv64i.h"
 
 #define GDBSTUB_MAX_BPS 64
+#define GDBSTUB_RXBUF 4096
 
 typedef struct gdbstub_t {
     int listen_fd;
@@ -18,6 +19,8 @@ typedef struct gdbstub_t {
     int stop_reason_sent;
     uint64_t breakpoints[GDBSTUB_MAX_BPS];
     int bp_count;
+    unsigned char rxbuf[GDBSTUB_RXBUF];
+    int rxlen;
 } gdbstub_t;
 
 int gdbstub_init(gdbstub_t *g, int port);
