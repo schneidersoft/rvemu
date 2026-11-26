@@ -2,6 +2,7 @@
 #define GDBSTUB_H
 
 #include <stdint.h>
+
 #include "librv64i.h"
 
 #define GDBSTUB_MAX_BPS 64
@@ -15,7 +16,6 @@ typedef struct gdbstub_t {
     int halt;
     int step;
     int stop_reason_sent;
-    int poll_counter;
     uint64_t breakpoints[GDBSTUB_MAX_BPS];
     int bp_count;
 } gdbstub_t;
@@ -23,8 +23,8 @@ typedef struct gdbstub_t {
 int gdbstub_init(gdbstub_t *g, int port);
 void gdbstub_close(gdbstub_t *g);
 int gdbstub_wait(gdbstub_t *g);
-int gdbstub_tick(gdbstub_t *g, cpu_t *cpu);
-int gdbstub_stop(gdbstub_t *g, cpu_t *cpu, int sig);
+int gdbstub_command_loop(gdbstub_t *g, cpu_t *cpu);
+void gdbstub_stop(gdbstub_t *g, int sig);
 int gdbstub_has_breakpoint(gdbstub_t *g, uint64_t pc);
 void gdbstub_notify_exit(gdbstub_t *g, int code);
 
